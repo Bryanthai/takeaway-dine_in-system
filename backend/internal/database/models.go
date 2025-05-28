@@ -18,6 +18,12 @@ type Account struct {
 	UserPhoneNumber int64
 }
 
+type Admintable struct {
+	Username string
+	ID       int32
+	Password string
+}
+
 type Food struct {
 	FoodID      int32
 	FoodName    string

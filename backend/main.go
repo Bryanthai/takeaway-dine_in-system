@@ -9,20 +9,26 @@ import(
 	"github.com/rs/cors"
 )
 
+func initServeMux(serveMux *http.ServeMux) {
+	serveMux.HandleFunc("POST /users/login", loginHandler)
+	serveMux.HandleFunc("POST /users/register", registerHandler)
+	serveMux.HandleFunc("PUT /users/change-info", alterAccountHandler)
+	serveMux.HandleFunc("GET /users/order", getOrderStatusHandler)
+	serveMux.HandleFunc("POST /users/rate", rateOrderHandler)
+
+	serveMux.HandleFunc("POST /foods", createFoodHandler)
+	serveMux.HandleFunc("PUT /foods/change-info", alterFoodHandler)
+	serveMux.HandleFunc("DELETE /foods", deleteFoodHandler)
+	serveMux.HandleFunc("GET /foods", getAllFoodHandler)
+
+	serveMux.HandleFunc("POST /orders", createOrderHandler)
+	serveMux.HandleFunc("DELETE /orders", deleteOrderHandler)
+	serveMux.HandleFunc("GET /orders", getAllOrdersHandler)
+}
 
 func main() {
 	serveMux := http.NewServeMux()
-	serveMux.HandleFunc("POST /user/login", loginHandler)
-	serveMux.HandleFunc("POST /user/register", registerHandler)
-	serveMux.HandleFunc("PUT /user/alter", alterAccountHandler)
-	serveMux.HandleFunc("POST /food/create", createFoodHandler)
-	serveMux.HandleFunc("PUT /food/alter", alterFoodHandler)
-	serveMux.HandleFunc("DELETE /food/item", deleteFoodHandler)
-	serveMux.HandleFunc("POST /order/new", createOrderHandler)
-	serveMux.HandleFunc("GET /user/order", getOrderStatusHandler)
-	serveMux.HandleFunc("POST /user/rate", rateOrderHandler)
-	serveMux.HandleFunc("DELETE /order/item", deleteOrderHandler)
-	serveMux.HandleFunc("GET /food/foods", getAllFoodHandler)
+	initServeMux(serveMux)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:8080", "http://localhost:5173"},

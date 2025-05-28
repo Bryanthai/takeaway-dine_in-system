@@ -89,3 +89,9 @@ SET
     deleted = true
 WHERE
     order_id = ?;
+
+-- name: GetAllOrders :many
+SELECT * FROM orders WHERE deleted = false;
+
+-- name: GetAdmin :one
+SELECT * FROM adminTable;

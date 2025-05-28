@@ -215,6 +215,17 @@ func (q *Queries) GetAccount(ctx context.Context, username string) (Account, err
 	return i, err
 }
 
+const getAdmin = `-- name: GetAdmin :one
+SELECT username, id, password FROM adminTable
+`
+
+func (q *Queries) GetAdmin(ctx context.Context) (Admintable, error) {
+	row := q.db.QueryRowContext(ctx, getAdmin)
+	var i Admintable
+	err := row.Scan(&i.Username, &i.ID, &i.Password)
+	return i, err
+}
+
 const getAllFood = `-- name: GetAllFood :many
 SELECT food_id, food_name, food_tag, price, info, ingredients, time_needed FROM food
 `
@@ -236,6 +247,43 @@ func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
 			&i.Info,
 			&i.Ingredients,
 			&i.TimeNeeded,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllOrders = `-- name: GetAllOrders :many
+SELECT order_id, user_id, order_info, rating, feedback, order_time, is_done, is_ranged, deleted FROM orders WHERE deleted = false
+`
+
+func (q *Queries) GetAllOrders(ctx context.Context) ([]Order, error) {
+	rows, err := q.db.QueryContext(ctx, getAllOrders)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.OrderID,
+			&i.UserID,
+			&i.OrderInfo,
+			&i.Rating,
+			&i.Feedback,
+			&i.OrderTime,
+			&i.IsDone,
+			&i.IsRanged,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
