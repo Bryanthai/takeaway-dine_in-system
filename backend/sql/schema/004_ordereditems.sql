@@ -4,6 +4,7 @@ create table items(
     order_id int not null,
     food_id int not null,
     quantity int not null default 1,
+    rating int default null check (rating >= 0 and rating <= 5),
     foreign key (food_id) references food(food_id) on delete cascade,
     foreign key (order_id) references orders(order_id) on delete cascade
     );

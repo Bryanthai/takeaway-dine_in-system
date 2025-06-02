@@ -1,0 +1,198 @@
+API Documentation
+
+POST /users/login
+Request Body:
+{
+  "username": "string",
+  "password": "string",
+  "expires_in_seconds": 3600
+}
+Response:
+{
+  "success": true,
+  "message": "Login successful",
+  "token": "jwt_token",
+  "id": 1,
+  "username": "string"
+}
+
+
+POST /users/register
+Request Body:
+{
+  "username": "string",
+  "password": "string",
+  "email": "string",
+  "address": "string",
+  "phone": 1234567890
+}
+Response:
+{
+  "success": true,
+  "message": "Registration successful"
+}
+
+PUT /users/change-info
+Headers:
+Authorization: Bearer <token>
+{
+  "username": "string",
+  "email": "string",
+  "address": "string",
+  "phone": 1234567890
+}
+Response:
+{
+  "success": true,
+  "message": "Account updated successfully"
+}
+
+POST /foods
+Headers:
+Authorization: Bearer <token>
+Request Body:
+{
+  "food_name": "string",
+  "food_tag": "string",
+  "price": 0,
+  "info": "string",
+  "ingredients": "string",
+  "time_needed": "string"
+}
+Response:
+{
+  "success": true,
+  "message": "Food item created successfully"
+}
+
+PUT /foods/change-info
+Headers:
+Authorization: Bearer <token>
+
+Request Body:
+{
+  "food_name": "string",
+  "food_tag": "string",
+  "price": 0,
+  "info": "string",
+  "ingredients": "string",
+  "time_needed": "string"
+}
+Response:
+{
+  "success": true,
+  "message": "Food item updated successfully"
+}
+
+DELETE /foods
+Headers:
+Authorization: Bearer <token>
+{
+  "food_name": "string"
+}
+Response:
+{
+  "success": true,
+  "message": "Food item deleted successfully"
+}
+
+GET /foods
+Response:
+{
+  "success": true,
+  "foods": [ /* array of food objects */ ],
+  "message": "Food list retrieved successfully"
+}
+
+POST /orders
+Headers:
+Authorization: Bearer <token>
+Request Body:
+{
+  "user_id": 1,
+  "order_info": "string",
+  "is_ranged": true
+}
+Response:
+{
+  "success": true,
+  "message": "Order created successfully"
+}
+
+GET /users/order
+Headers:
+Authorization: Bearer <token>
+Request Body:
+{
+  "user_id": 1
+}
+Response:
+{
+  "success": true,
+  "orders": [ /* array of order objects */ ],
+  "message": "Orders retrieved successfully"
+}
+
+POST /users/rate
+Headers:
+Authorization: Bearer <token>
+Request Body:
+{
+  "order_id": 1,
+  "rating": 5,
+  "feedback": "string"
+}
+Response:
+{
+  "success": true,
+  "message": "Order rated successfully"
+}
+
+DELETE /orders
+Headers:
+Authorization: Bearer <token>
+Request Body:
+{
+  "order_id": 1
+}
+Response:
+{
+  "success": true,
+  "message": "Order deleted successfully"
+}
+
+GET /orders
+Headers:
+Authorization: Bearer <token>
+Response:
+{
+  "success": true,
+  "orders": [ /* array of order objects */ ],
+  "message": "Orders retrieved successfully"
+}
+
+All endpoints that require authentication expect a JWT token in the Authorization header.
+
+structures of food and orders:
+
+type Food struct {
+	FoodID      int32
+	FoodName    string
+	FoodTag     string
+	Price       float64
+	Info        sql.NullString
+	Ingredients string
+	TimeNeeded  sql.NullString
+}
+
+type Order struct {
+	OrderID   int32
+	UserID    int32
+	OrderInfo string
+	Rating    sql.NullInt32
+	Feedback  sql.NullString
+	OrderTime sql.NullTime
+	IsDone    bool
+	IsRanged  bool
+	Deleted   bool
+}

@@ -6,6 +6,7 @@ package database
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Account struct {
@@ -14,14 +15,10 @@ type Account struct {
 	Password        string
 	Email           string
 	Address         string
+	Balance         float64
+	IsAdmin         bool
 	UserTag         sql.NullString
 	UserPhoneNumber int64
-}
-
-type Admintable struct {
-	Username string
-	ID       int32
-	Password string
 }
 
 type Food struct {
@@ -29,9 +26,13 @@ type Food struct {
 	FoodName    string
 	FoodTag     string
 	Price       float64
+	FoodType    string
+	Picture     sql.NullString
+	LongRange   bool
+	Description string
 	Info        sql.NullString
 	Ingredients string
-	TimeNeeded  sql.NullString
+	TimeNeeded  int32
 }
 
 type Item struct {
@@ -39,16 +40,18 @@ type Item struct {
 	OrderID  int32
 	FoodID   int32
 	Quantity int32
+	Rating   sql.NullInt32
 }
 
 type Order struct {
-	OrderID   int32
-	UserID    int32
-	OrderInfo string
-	Rating    sql.NullInt32
-	Feedback  sql.NullString
-	OrderTime sql.NullTime
-	IsDone    bool
-	IsRanged  bool
-	Deleted   bool
+	OrderID       int32
+	UserID        int32
+	OrderInfo     string
+	Feedback      sql.NullString
+	OrderTime     sql.NullTime
+	EstimatedTime time.Time
+	IsDone        bool
+	IsRanged      bool
+	Deleted       bool
+	IsPaid        bool
 }

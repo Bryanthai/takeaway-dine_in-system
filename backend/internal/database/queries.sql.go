@@ -44,7 +44,9 @@ SET
     price = ?,
     info = ?,
     ingredients = ?,
-    time_needed = ?
+    time_needed = ?,
+    picture = ?,
+    description = ?
 WHERE
     food_name = ?
 `
@@ -54,7 +56,9 @@ type AlterFoodParams struct {
 	Price       float64
 	Info        sql.NullString
 	Ingredients string
-	TimeNeeded  sql.NullString
+	TimeNeeded  int32
+	Picture     sql.NullString
+	Description string
 	FoodName    string
 }
 
@@ -65,6 +69,8 @@ func (q *Queries) AlterFood(ctx context.Context, arg AlterFoodParams) error {
 		arg.Info,
 		arg.Ingredients,
 		arg.TimeNeeded,
+		arg.Picture,
+		arg.Description,
 		arg.FoodName,
 	)
 	return err
@@ -101,8 +107,12 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 }
 
 const createFood = `-- name: CreateFood :exec
-INSERT INTO food (food_name, food_tag, price, info, ingredients, time_needed)
+INSERT INTO food (food_name, food_tag, price, info, ingredients, time_needed, picture, description, food_type, long_range)
 VALUES (
+    ?,
+    ?,
+    ?,
+    ?,
     ?,
     ?,
     ?,
@@ -118,7 +128,11 @@ type CreateFoodParams struct {
 	Price       float64
 	Info        sql.NullString
 	Ingredients string
-	TimeNeeded  sql.NullString
+	TimeNeeded  int32
+	Picture     sql.NullString
+	Description string
+	FoodType    string
+	LongRange   bool
 }
 
 func (q *Queries) CreateFood(ctx context.Context, arg CreateFoodParams) error {
@@ -129,6 +143,10 @@ func (q *Queries) CreateFood(ctx context.Context, arg CreateFoodParams) error {
 		arg.Info,
 		arg.Ingredients,
 		arg.TimeNeeded,
+		arg.Picture,
+		arg.Description,
+		arg.FoodType,
+		arg.LongRange,
 	)
 	return err
 }
@@ -197,7 +215,7 @@ func (q *Queries) DeleteOrder(ctx context.Context, orderID int32) error {
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT id, username, password, email, address, user_tag, user_phone_number FROM accounts WHERE username = ?
+SELECT id, username, password, email, address, balance, is_admin, user_tag, user_phone_number FROM accounts WHERE username = ?
 `
 
 func (q *Queries) GetAccount(ctx context.Context, username string) (Account, error) {
@@ -209,25 +227,112 @@ func (q *Queries) GetAccount(ctx context.Context, username string) (Account, err
 		&i.Password,
 		&i.Email,
 		&i.Address,
+		&i.Balance,
+		&i.IsAdmin,
 		&i.UserTag,
 		&i.UserPhoneNumber,
 	)
 	return i, err
 }
 
-const getAdmin = `-- name: GetAdmin :one
-SELECT username, id, password FROM adminTable
+const getAdminAccount = `-- name: GetAdminAccount :one
+SELECT id, username, password, email, address, balance, is_admin, user_tag, user_phone_number FROM accounts WHERE is_admin = true
 `
 
-func (q *Queries) GetAdmin(ctx context.Context) (Admintable, error) {
-	row := q.db.QueryRowContext(ctx, getAdmin)
-	var i Admintable
-	err := row.Scan(&i.Username, &i.ID, &i.Password)
+func (q *Queries) GetAdminAccount(ctx context.Context) (Account, error) {
+	row := q.db.QueryRowContext(ctx, getAdminAccount)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Password,
+		&i.Email,
+		&i.Address,
+		&i.Balance,
+		&i.IsAdmin,
+		&i.UserTag,
+		&i.UserPhoneNumber,
+	)
 	return i, err
 }
 
+const getAllAccounts = `-- name: GetAllAccounts :many
+SELECT id, username, password, email, address, balance, is_admin, user_tag, user_phone_number FROM accounts WHERE is_admin = false
+`
+
+func (q *Queries) GetAllAccounts(ctx context.Context) ([]Account, error) {
+	rows, err := q.db.QueryContext(ctx, getAllAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Account
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Password,
+			&i.Email,
+			&i.Address,
+			&i.Balance,
+			&i.IsAdmin,
+			&i.UserTag,
+			&i.UserPhoneNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllDeletedOrdersByUser = `-- name: GetAllDeletedOrdersByUser :many
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders WHERE user_id = ? AND deleted = true
+`
+
+func (q *Queries) GetAllDeletedOrdersByUser(ctx context.Context, userID int32) ([]Order, error) {
+	rows, err := q.db.QueryContext(ctx, getAllDeletedOrdersByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.OrderID,
+			&i.UserID,
+			&i.OrderInfo,
+			&i.Feedback,
+			&i.OrderTime,
+			&i.EstimatedTime,
+			&i.IsDone,
+			&i.IsRanged,
+			&i.Deleted,
+			&i.IsPaid,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAllFood = `-- name: GetAllFood :many
-SELECT food_id, food_name, food_tag, price, info, ingredients, time_needed FROM food
+SELECT food_id, food_name, food_tag, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food
 `
 
 func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
@@ -244,6 +349,10 @@ func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
 			&i.FoodName,
 			&i.FoodTag,
 			&i.Price,
+			&i.FoodType,
+			&i.Picture,
+			&i.LongRange,
+			&i.Description,
 			&i.Info,
 			&i.Ingredients,
 			&i.TimeNeeded,
@@ -261,8 +370,74 @@ func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
 	return items, nil
 }
 
+const getAllFoodLongRange = `-- name: GetAllFoodLongRange :many
+SELECT food_id, food_name, food_tag, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE long_range = true
+`
+
+func (q *Queries) GetAllFoodLongRange(ctx context.Context) ([]Food, error) {
+	rows, err := q.db.QueryContext(ctx, getAllFoodLongRange)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Food
+	for rows.Next() {
+		var i Food
+		if err := rows.Scan(
+			&i.FoodID,
+			&i.FoodName,
+			&i.FoodTag,
+			&i.Price,
+			&i.FoodType,
+			&i.Picture,
+			&i.LongRange,
+			&i.Description,
+			&i.Info,
+			&i.Ingredients,
+			&i.TimeNeeded,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllFoodTags = `-- name: GetAllFoodTags :many
+SELECT DISTINCT food_tag FROM food
+`
+
+func (q *Queries) GetAllFoodTags(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getAllFoodTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var food_tag string
+		if err := rows.Scan(&food_tag); err != nil {
+			return nil, err
+		}
+		items = append(items, food_tag)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAllOrders = `-- name: GetAllOrders :many
-SELECT order_id, user_id, order_info, rating, feedback, order_time, is_done, is_ranged, deleted FROM orders WHERE deleted = false
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders WHERE deleted = false
 `
 
 func (q *Queries) GetAllOrders(ctx context.Context) ([]Order, error) {
@@ -278,12 +453,13 @@ func (q *Queries) GetAllOrders(ctx context.Context) ([]Order, error) {
 			&i.OrderID,
 			&i.UserID,
 			&i.OrderInfo,
-			&i.Rating,
 			&i.Feedback,
 			&i.OrderTime,
+			&i.EstimatedTime,
 			&i.IsDone,
 			&i.IsRanged,
 			&i.Deleted,
+			&i.IsPaid,
 		); err != nil {
 			return nil, err
 		}
@@ -298,8 +474,96 @@ func (q *Queries) GetAllOrders(ctx context.Context) ([]Order, error) {
 	return items, nil
 }
 
+const getAllOrdersByUser = `-- name: GetAllOrdersByUser :many
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders WHERE user_id = ? AND deleted = false
+`
+
+func (q *Queries) GetAllOrdersByUser(ctx context.Context, userID int32) ([]Order, error) {
+	rows, err := q.db.QueryContext(ctx, getAllOrdersByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.OrderID,
+			&i.UserID,
+			&i.OrderInfo,
+			&i.Feedback,
+			&i.OrderTime,
+			&i.EstimatedTime,
+			&i.IsDone,
+			&i.IsRanged,
+			&i.Deleted,
+			&i.IsPaid,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAverageRating = `-- name: GetAverageRating :one
+SELECT AVG(rating) AS average_rating
+FROM items
+WHERE food_id = ? AND rating IS NOT NULL
+`
+
+func (q *Queries) GetAverageRating(ctx context.Context, foodID int32) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getAverageRating, foodID)
+	var average_rating interface{}
+	err := row.Scan(&average_rating)
+	return average_rating, err
+}
+
+const getAverageSpendingByAllUsers = `-- name: GetAverageSpendingByAllUsers :one
+SELECT AVG(total_price) AS average_spending
+FROM (
+    SELECT SUM(food.price * items.quantity) AS total_price
+    FROM orders
+    JOIN items ON orders.order_id = items.order_id
+    JOIN food ON items.food_id = food.food_id
+    GROUP BY orders.user_id, orders.order_id
+) AS spending
+`
+
+func (q *Queries) GetAverageSpendingByAllUsers(ctx context.Context) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getAverageSpendingByAllUsers)
+	var average_spending interface{}
+	err := row.Scan(&average_spending)
+	return average_spending, err
+}
+
+const getAverageSpendingByUser = `-- name: GetAverageSpendingByUser :one
+SELECT AVG(total_price) AS average_spending
+FROM (
+    SELECT SUM(food.price * items.quantity) AS total_price
+    FROM orders
+    JOIN items ON orders.order_id = items.order_id
+    JOIN food ON items.food_id = food.food_id
+    WHERE orders.user_id = ?
+    GROUP BY orders.order_id
+) AS spending
+`
+
+func (q *Queries) GetAverageSpendingByUser(ctx context.Context, userID int32) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getAverageSpendingByUser, userID)
+	var average_spending interface{}
+	err := row.Scan(&average_spending)
+	return average_spending, err
+}
+
 const getFood = `-- name: GetFood :one
-SELECT food_id, food_name, food_tag, price, info, ingredients, time_needed FROM food WHERE food_name = ?
+SELECT food_id, food_name, food_tag, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_name = ?
 `
 
 func (q *Queries) GetFood(ctx context.Context, foodName string) (Food, error) {
@@ -310,6 +574,10 @@ func (q *Queries) GetFood(ctx context.Context, foodName string) (Food, error) {
 		&i.FoodName,
 		&i.FoodTag,
 		&i.Price,
+		&i.FoodType,
+		&i.Picture,
+		&i.LongRange,
+		&i.Description,
 		&i.Info,
 		&i.Ingredients,
 		&i.TimeNeeded,
@@ -317,8 +585,182 @@ func (q *Queries) GetFood(ctx context.Context, foodName string) (Food, error) {
 	return i, err
 }
 
+const getFoodById = `-- name: GetFoodById :one
+SELECT food_id, food_name, food_tag, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_id = ?
+`
+
+func (q *Queries) GetFoodById(ctx context.Context, foodID int32) (Food, error) {
+	row := q.db.QueryRowContext(ctx, getFoodById, foodID)
+	var i Food
+	err := row.Scan(
+		&i.FoodID,
+		&i.FoodName,
+		&i.FoodTag,
+		&i.Price,
+		&i.FoodType,
+		&i.Picture,
+		&i.LongRange,
+		&i.Description,
+		&i.Info,
+		&i.Ingredients,
+		&i.TimeNeeded,
+	)
+	return i, err
+}
+
+const getFoodByTag = `-- name: GetFoodByTag :many
+SELECT food_id, food_name, food_tag, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_tag = ?
+`
+
+func (q *Queries) GetFoodByTag(ctx context.Context, foodTag string) ([]Food, error) {
+	rows, err := q.db.QueryContext(ctx, getFoodByTag, foodTag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Food
+	for rows.Next() {
+		var i Food
+		if err := rows.Scan(
+			&i.FoodID,
+			&i.FoodName,
+			&i.FoodTag,
+			&i.Price,
+			&i.FoodType,
+			&i.Picture,
+			&i.LongRange,
+			&i.Description,
+			&i.Info,
+			&i.Ingredients,
+			&i.TimeNeeded,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFoodByType = `-- name: GetFoodByType :many
+SELECT food_id, food_name, food_tag, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_type = ?
+`
+
+func (q *Queries) GetFoodByType(ctx context.Context, foodType string) ([]Food, error) {
+	rows, err := q.db.QueryContext(ctx, getFoodByType, foodType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Food
+	for rows.Next() {
+		var i Food
+		if err := rows.Scan(
+			&i.FoodID,
+			&i.FoodName,
+			&i.FoodTag,
+			&i.Price,
+			&i.FoodType,
+			&i.Picture,
+			&i.LongRange,
+			&i.Description,
+			&i.Info,
+			&i.Ingredients,
+			&i.TimeNeeded,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLastInsertedOrder = `-- name: GetLastInsertedOrder :one
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders
+WHERE order_id = LAST_INSERT_ID()
+`
+
+func (q *Queries) GetLastInsertedOrder(ctx context.Context) (Order, error) {
+	row := q.db.QueryRowContext(ctx, getLastInsertedOrder)
+	var i Order
+	err := row.Scan(
+		&i.OrderID,
+		&i.UserID,
+		&i.OrderInfo,
+		&i.Feedback,
+		&i.OrderTime,
+		&i.EstimatedTime,
+		&i.IsDone,
+		&i.IsRanged,
+		&i.Deleted,
+		&i.IsPaid,
+	)
+	return i, err
+}
+
+const getLongestTimeNeededFoodInOrder = `-- name: GetLongestTimeNeededFoodInOrder :one
+SELECT MAX(food.time_needed) AS longest_time_needed
+FROM food
+JOIN items ON food.food_id = items.food_id
+WHERE items.order_id = ?
+`
+
+func (q *Queries) GetLongestTimeNeededFoodInOrder(ctx context.Context, orderID int32) (interface{}, error) {
+	row := q.db.QueryRowContext(ctx, getLongestTimeNeededFoodInOrder, orderID)
+	var longest_time_needed interface{}
+	err := row.Scan(&longest_time_needed)
+	return longest_time_needed, err
+}
+
+const getMostOrderedFood = `-- name: GetMostOrderedFood :many
+SELECT food.food_name, COUNT(items.food_id) AS order_count
+FROM food
+JOIN items ON food.food_id = items.food_id
+GROUP BY food.food_name
+ORDER BY order_count DESC
+`
+
+type GetMostOrderedFoodRow struct {
+	FoodName   string
+	OrderCount int64
+}
+
+func (q *Queries) GetMostOrderedFood(ctx context.Context) ([]GetMostOrderedFoodRow, error) {
+	rows, err := q.db.QueryContext(ctx, getMostOrderedFood)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMostOrderedFoodRow
+	for rows.Next() {
+		var i GetMostOrderedFoodRow
+		if err := rows.Scan(&i.FoodName, &i.OrderCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOrder = `-- name: GetOrder :many
-SELECT order_id, user_id, order_info, rating, feedback, order_time, is_done, is_ranged, deleted FROM orders WHERE user_id = ?
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders WHERE user_id = ?
 `
 
 func (q *Queries) GetOrder(ctx context.Context, userID int32) ([]Order, error) {
@@ -334,12 +776,13 @@ func (q *Queries) GetOrder(ctx context.Context, userID int32) ([]Order, error) {
 			&i.OrderID,
 			&i.UserID,
 			&i.OrderInfo,
-			&i.Rating,
 			&i.Feedback,
 			&i.OrderTime,
+			&i.EstimatedTime,
 			&i.IsDone,
 			&i.IsRanged,
 			&i.Deleted,
+			&i.IsPaid,
 		); err != nil {
 			return nil, err
 		}
@@ -354,8 +797,43 @@ func (q *Queries) GetOrder(ctx context.Context, userID int32) ([]Order, error) {
 	return items, nil
 }
 
+const getOrderById = `-- name: GetOrderById :one
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders WHERE order_id = ?
+`
+
+func (q *Queries) GetOrderById(ctx context.Context, orderID int32) (Order, error) {
+	row := q.db.QueryRowContext(ctx, getOrderById, orderID)
+	var i Order
+	err := row.Scan(
+		&i.OrderID,
+		&i.UserID,
+		&i.OrderInfo,
+		&i.Feedback,
+		&i.OrderTime,
+		&i.EstimatedTime,
+		&i.IsDone,
+		&i.IsRanged,
+		&i.Deleted,
+		&i.IsPaid,
+	)
+	return i, err
+}
+
+const getOrderedCountByFood = `-- name: GetOrderedCountByFood :one
+SELECT COUNT(*) AS ordered_count
+FROM items
+WHERE food_id = ?
+`
+
+func (q *Queries) GetOrderedCountByFood(ctx context.Context, foodID int32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getOrderedCountByFood, foodID)
+	var ordered_count int64
+	err := row.Scan(&ordered_count)
+	return ordered_count, err
+}
+
 const getOrderedItems = `-- name: GetOrderedItems :many
-SELECT item_id, order_id, food_id, quantity FROM items WHERE order_id = ?
+SELECT item_id, order_id, food_id, quantity, rating FROM items WHERE order_id = ?
 `
 
 func (q *Queries) GetOrderedItems(ctx context.Context, orderID int32) ([]Item, error) {
@@ -372,6 +850,7 @@ func (q *Queries) GetOrderedItems(ctx context.Context, orderID int32) ([]Item, e
 			&i.OrderID,
 			&i.FoodID,
 			&i.Quantity,
+			&i.Rating,
 		); err != nil {
 			return nil, err
 		}
@@ -386,10 +865,28 @@ func (q *Queries) GetOrderedItems(ctx context.Context, orderID int32) ([]Item, e
 	return items, nil
 }
 
+const rateFood = `-- name: RateFood :exec
+UPDATE items
+SET
+    rating = ?
+WHERE
+    food_id = ? AND order_id = ?
+`
+
+type RateFoodParams struct {
+	Rating  sql.NullInt32
+	FoodID  int32
+	OrderID int32
+}
+
+func (q *Queries) RateFood(ctx context.Context, arg RateFoodParams) error {
+	_, err := q.db.ExecContext(ctx, rateFood, arg.Rating, arg.FoodID, arg.OrderID)
+	return err
+}
+
 const rateOrder = `-- name: RateOrder :exec
 UPDATE orders
 SET
-    rating = ?,
     feedback = ?,
     is_done = true
 WHERE
@@ -397,12 +894,91 @@ WHERE
 `
 
 type RateOrderParams struct {
-	Rating   sql.NullInt32
 	Feedback sql.NullString
 	OrderID  int32
 }
 
 func (q *Queries) RateOrder(ctx context.Context, arg RateOrderParams) error {
-	_, err := q.db.ExecContext(ctx, rateOrder, arg.Rating, arg.Feedback, arg.OrderID)
+	_, err := q.db.ExecContext(ctx, rateOrder, arg.Feedback, arg.OrderID)
+	return err
+}
+
+const updateEstimatedTime = `-- name: UpdateEstimatedTime :exec
+UPDATE orders
+SET
+    estimated_time = estimated_time + INTERVAL ? MINUTE
+WHERE
+    order_id = ?
+`
+
+type UpdateEstimatedTimeParams struct {
+	DATEADD interface{}
+	OrderID int32
+}
+
+func (q *Queries) UpdateEstimatedTime(ctx context.Context, arg UpdateEstimatedTimeParams) error {
+	_, err := q.db.ExecContext(ctx, updateEstimatedTime, arg.DATEADD, arg.OrderID)
+	return err
+}
+
+const updateFeedback = `-- name: UpdateFeedback :exec
+UPDATE orders
+SET
+    feedback = ?
+WHERE
+    order_id = ?
+`
+
+type UpdateFeedbackParams struct {
+	Feedback sql.NullString
+	OrderID  int32
+}
+
+func (q *Queries) UpdateFeedback(ctx context.Context, arg UpdateFeedbackParams) error {
+	_, err := q.db.ExecContext(ctx, updateFeedback, arg.Feedback, arg.OrderID)
+	return err
+}
+
+const updateOrderDoneStatus = `-- name: UpdateOrderDoneStatus :exec
+UPDATE orders
+SET
+    is_done = true
+WHERE
+    order_id = ?
+`
+
+func (q *Queries) UpdateOrderDoneStatus(ctx context.Context, orderID int32) error {
+	_, err := q.db.ExecContext(ctx, updateOrderDoneStatus, orderID)
+	return err
+}
+
+const updateOrderPayment = `-- name: UpdateOrderPayment :exec
+UPDATE orders
+SET
+    is_paid = true
+WHERE
+    order_id = ?
+`
+
+func (q *Queries) UpdateOrderPayment(ctx context.Context, orderID int32) error {
+	_, err := q.db.ExecContext(ctx, updateOrderPayment, orderID)
+	return err
+}
+
+const updateOrderUser = `-- name: UpdateOrderUser :exec
+UPDATE accounts
+SET
+    balance = ?
+WHERE
+    id = ?
+`
+
+type UpdateOrderUserParams struct {
+	Balance float64
+	ID      int32
+}
+
+func (q *Queries) UpdateOrderUser(ctx context.Context, arg UpdateOrderUserParams) error {
+	_, err := q.db.ExecContext(ctx, updateOrderUser, arg.Balance, arg.ID)
 	return err
 }
