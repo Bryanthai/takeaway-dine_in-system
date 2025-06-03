@@ -13,30 +13,30 @@
     </div>
 
     <ul v-else class="divide-y divide-gray-200 max-h-60 overflow-y-auto mb-4">
-      <li v-for="item in cartStore.items" :key="item.FoodID" class="py-3 flex items-center">
+      <li v-for="item in cartStore.items" :key="item.food.FoodID" class="py-3 flex items-center">
         <img
-          v-if="item.Picture && item.Picture.String"
-          :src="item.Picture.String"
-          :alt="item.FoodName"
+          v-if="item.food.Picture && item.food.Picture.String"
+          :src="'data:image/jpeg;base64,' + item.food.Picture.String"
+          :alt="item.food.FoodName"
           class="w-16 h-16 object-cover rounded-md mr-3 shadow-sm"
         />
         <div v-else class="w-16 h-16 bg-gray-200 rounded-md mr-3 flex items-center justify-center text-gray-500 text-xs text-center">
           No Image
         </div>
         <div class="flex-grow">
-          <p class="font-semibold text-gray-800 text-base truncate">{{ item.FoodName }}</p>
-          <p class="text-sm text-gray-600">${{ item.Price ? item.Price.toFixed(2) : '0.00' }} x {{ item.quantity }}</p>
+          <p class="font-semibold text-gray-800 text-base truncate">{{ item.food.FoodName }}</p>
+          <p class="text-sm text-gray-600">${{ item.food.Price ? item.food.Price.toFixed(2) : '0.00' }} x {{ item.quantity }}</p>
         </div>
         <div class="flex items-center ml-auto">
-          <button @click="cartStore.decrementItem(item.FoodID)" class="text-gray-500 hover:text-gray-700 p-1 rounded-full">
+          <button @click="cartStore.decrementItem(item.food.FoodID)" class="text-gray-500 hover:text-gray-700 p-1 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2c-.55 0-1 .45-1 1v18c0 .55.45 1 1 1s1-.45 1-1V3c0-.55-.45-1-1-1z"/>
+              <path d="M19 13H5v-2h14v2z"/>
             </svg>
           </button>
           <span class="mx-2 font-medium">{{ item.quantity }}</span>
-          <button @click="cartStore.incrementItem(item.FoodID)" class="text-gray-500 hover:text-gray-700 p-1 rounded-full">
+          <button @click="cartStore.incrementItem(item.food.FoodID)" class="text-gray-500 hover:text-gray-700 p-1 rounded-full">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 4c-.55 0-1 .45-1 1v6H5c-.55 0-1 .45-1 1s.45 1 1 1h6v6c0 .55.45 1 1 1s1-.45 1-1v-6h6c.55 0 1-.45 1-1s-.45-1-1-1h-6V5c0-.55-.45-1-1-1z"/>
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
             </svg>
           </button>
         </div>
@@ -83,7 +83,8 @@
 <script setup>
 import { ref } from 'vue';
 import { useCartStore } from '../stores/cart';
-import { useRouter } from 'vue-router'; // Import useRouter
+import { useRouter } from 'vue-router';
+import { useUserStore } from '../stores/user';
 
 const props = defineProps({
   isVisible: {
@@ -95,9 +96,10 @@ const props = defineProps({
 const emit = defineEmits(['show', 'hide']);
 
 const cartStore = useCartStore();
-const router = useRouter(); // Initialize router
+const router = useRouter();
+const userStore = useUserStore();
 
-const isDelivery = ref(false); // New reactive state for delivery option
+const isDelivery = ref(false);
 const checkoutLoading = ref(false);
 const checkoutSuccess = ref(false);
 const checkoutError = ref(null);
@@ -107,63 +109,46 @@ const checkout = async () => {
   checkoutSuccess.value = false;
   checkoutError.value = null;
 
-  const userToken = localStorage.getItem('userToken');
-  if (!userToken) {
+  // Ensure user is logged in (token exists)
+  if (!userStore.userToken) {
     checkoutError.value = 'Please log in to place an order.';
     checkoutLoading.value = false;
-    router.push('/login'); // Redirect to login if no token
-    return;
-  }
-
-  // Decode token to get UserID (assuming user_id is in the JWT payload)
-  let userID = null;
-  try {
-    const base64Url = userToken.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(base64));
-    userID = payload.user_id; // Adjust if your JWT claims differ (e.g., 'sub', 'id')
-    if (!userID) {
-      throw new Error('User ID not found in token.');
-    }
-  } catch (e) {
-    console.error('Error decoding JWT for UserID:', e);
-    checkoutError.value = 'Authentication error. Please log in again.';
-    checkoutLoading.value = false;
-    localStorage.removeItem('userToken');
+    userStore.logout(); // Clear any stale token and redirect
     router.push('/login');
     return;
   }
+  const userToken = userStore.userToken; // Get token from store
 
   // Prepare OrderInfo string (summary of items for the order overall)
   const orderInfoArray = cartStore.items.map(item => ({
-    FoodID: item.FoodID,
-    FoodName: item.FoodName,
+    FoodID: item.food.FoodID,
+    FoodName: item.food.FoodName,
     Quantity: item.quantity,
-    Price: item.Price, // Include price for accurate summary
+    Price: item.food.Price,
   }));
   const orderInfoString = JSON.stringify(orderInfoArray);
 
-  // Prepare OrderItems for the backend (only FoodID and Quantity)
+  // Prepare OrderItems for the backend (ONLY FoodID and Quantity, with CORRECT keys)
   const orderItems = cartStore.items.map(item => ({
-    FoodID: item.FoodID,
-    Quantity: item.quantity,
+    food_id: item.food.FoodID,
+    quantity: item.quantity,
   }));
 
+  // Construct the request body WITHOUT the user_id field
   const requestBody = {
-    user_id: userID,
     order_info: orderInfoString,
-    is_ranged: isDelivery.value, // True for delivery, false for pickup
+    is_ranged: isDelivery.value,
     order_items: orderItems,
   };
 
-  console.log('Sending order request:', requestBody); // For debugging
+  console.log('Sending order request:', JSON.stringify(requestBody, null, 2));
 
   try {
     const response = await fetch('http://localhost:8080/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userToken}`,
+        'Authorization': `Bearer ${userToken}`, // User identification is handled by the token
       },
       body: JSON.stringify(requestBody),
     });
@@ -174,7 +159,7 @@ const checkout = async () => {
       checkoutSuccess.value = true;
       cartStore.clearCart(); // Clear the cart on successful order
       emit('hide'); // Hide the cart overlay
-      // --- CHANGE IS HERE ---
+
       const newOrderId = data.order_id; // Assuming your backend returns the new order_id
       if (newOrderId) {
         setTimeout(() => {
@@ -186,11 +171,10 @@ const checkout = async () => {
           router.push('/orders'); // Fallback to orders page if ID is missing
         }, 1500);
       }
-      // --- END CHANGE ---
     } else {
       checkoutError.value = data.message || 'Failed to create order.';
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('userToken');
+        userStore.logout(); // User is unauthorized/forbidden, log them out
         router.push('/login');
       }
     }

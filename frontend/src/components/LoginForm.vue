@@ -71,9 +71,11 @@
 
 <script setup>
 import { ref, reactive } from 'vue';
-import { useRouter } from 'vue-router'; // Import useRouter
+import { useRouter } from 'vue-router';
+import { useUserStore } from '../stores/user'; // Import the user store
 
-const router = useRouter(); // Initialize router
+const router = useRouter();
+const userStore = useUserStore(); // Initialize the user store
 
 const username = ref('');
 const password = ref('');
@@ -131,10 +133,17 @@ const handleLogin = async () => {
       loginSuccess.value = true;
       responseMessage.value = data.message || 'Login successful!';
 
-      localStorage.setItem('userToken', data.token);
-      console.log('JWT Token saved to localStorage:', data.token);
+      // --- IMPORTANT CHANGE HERE ---
+      // Use the setLoginState action from your userStore
+      // The backend MUST return 'token' and 'is_admin' in the response
+      userStore.setLoginState(data.token, data.is_admin);
+      // --- END IMPORTANT CHANGE ---
 
-      // Redirect to the menu page after successful login
+      console.log('Login successful! User Token:', data.token);
+      console.log('Is Admin:', data.is_admin);
+
+
+      // Redirect after a short delay
       setTimeout(() => {
         router.push('/menu'); // Navigate to the /menu route
       }, 1000); // Give user a moment to see success message

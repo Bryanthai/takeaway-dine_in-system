@@ -512,6 +512,44 @@ func (q *Queries) GetAllOrdersByUser(ctx context.Context, userID int32) ([]Order
 	return items, nil
 }
 
+const getAllOrdersNotDone = `-- name: GetAllOrdersNotDone :many
+SELECT order_id, user_id, order_info, feedback, order_time, estimated_time, is_done, is_ranged, deleted, is_paid FROM orders WHERE is_done = false AND deleted = false
+`
+
+func (q *Queries) GetAllOrdersNotDone(ctx context.Context) ([]Order, error) {
+	rows, err := q.db.QueryContext(ctx, getAllOrdersNotDone)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Order
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.OrderID,
+			&i.UserID,
+			&i.OrderInfo,
+			&i.Feedback,
+			&i.OrderTime,
+			&i.EstimatedTime,
+			&i.IsDone,
+			&i.IsRanged,
+			&i.Deleted,
+			&i.IsPaid,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAverageRating = `-- name: GetAverageRating :one
 SELECT AVG(rating) AS average_rating
 FROM items

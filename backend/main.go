@@ -20,15 +20,15 @@ func initServeMux(serveMux *http.ServeMux) {
 	serveMux.HandleFunc("PUT /recharge", RechargeAccount) //done
 
 	serveMux.HandleFunc("POST /foods", createFoodHandler) //done
-	serveMux.HandleFunc("PUT /foods/change-info", alterFoodHandler)
-	serveMux.HandleFunc("DELETE /foods", deleteFoodHandler)
+	serveMux.HandleFunc("PUT /foods/change-info", alterFoodHandler) //done
+	serveMux.HandleFunc("DELETE /foods", deleteFoodHandler) //done
 	serveMux.HandleFunc("GET /foods", getFoodByIdHandler) //done
 
 
-	serveMux.HandleFunc("POST /orders", createOrderHandler)
-	serveMux.HandleFunc("DELETE /orders", deleteOrderHandler)
-	serveMux.HandleFunc("GET /orders", getAllOrdersHandler)
+	serveMux.HandleFunc("POST /orders", createOrderHandler) //done
+	serveMux.HandleFunc("DELETE /orders", deleteOrderHandler) //done
 	serveMux.HandleFunc("GET /orders/user", getOrderStatusHandler) //done
+	serveMux.HandleFunc("GET /orders/info", GetOrderByIdHandler) //done
 	serveMux.HandleFunc("PUT /orders/rate", rateOrderedItems) //done
 	serveMux.HandleFunc("PUT /orders/feedback", UpdateFeedback) //done
 	serveMux.HandleFunc("GET /orders/items", getOrderedItemsHandler) //done
@@ -39,10 +39,11 @@ func initServeMux(serveMux *http.ServeMux) {
 	serveMux.HandleFunc("GET /menu/sort-type", getFoodByTypeHandler) //done
 	serveMux.HandleFunc("GET /menu/sort-by-usertag", getFoodByUserTag) //done
 
-	serveMux.HandleFunc("GET /admin/users", GetAllUsers)
-	serveMux.HandleFunc("GET /admin/total-average", GetAverageSpendingAll)
-	serveMux.HandleFunc("GET /admin/total-average-by-user", GetAverageSpendingByUser)
-	serveMux.HandleFunc("GET /admin/orders-all", getAllOrdersHandler)
+	serveMux.HandleFunc("GET /admin/users", GetAllUsers) //done
+	serveMux.HandleFunc("GET /admin/undone-orders", getAllUndoneOrder) //done
+	serveMux.HandleFunc("GET /admin/total-average", GetAverageSpendingAll) //done
+	serveMux.HandleFunc("GET /admin/total-average-by-user", GetAverageSpendingByUser) //done
+	serveMux.HandleFunc("GET /admin/orders-all", getAllOrdersHandler) //done
 }
 
 func main() {

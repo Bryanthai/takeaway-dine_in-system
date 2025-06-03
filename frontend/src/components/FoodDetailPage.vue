@@ -20,13 +20,14 @@
     <div v-else-if="!food" class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative text-center" role="alert">
       <strong class="font-bold">Food Item Not Found!</strong>
       <span class="block sm:inline ml-2">The requested food item could not be loaded.</span>
+    <router-link to="/menu" class="text-blue-600 hover:underline mt-4 block">Back to Menu</router-link>
     </div>
 
     <div v-else class="max-w-4xl mx-auto bg-white rounded-lg shadow-xl p-8 flex flex-col md:flex-row">
       <div class="md:w-1/3 flex items-center justify-center p-4">
         <img
           v-if="food.Picture && food.Picture.String"
-          :src="food.Picture.String"
+          :src="'data:image/jpeg;base64,' + food.Picture.String"
           :alt="food.FoodName"
           class="rounded-lg shadow-md max-h-64 object-cover w-full"
         />
@@ -36,14 +37,36 @@
       </div>
 
       <div class="md:w-2/3 md:pl-8 mt-6 md:mt-0">
-        <h3 class="text-3xl font-bold text-gray-900 mb-2">{{ food.FoodName }}</h3>
-        <p class="text-indigo-600 text-2xl font-bold mb-4">${{ food.Price.toFixed(2) }}</p>
+        <h3 class="text-3xl font-bold text-gray-900 mb-2">
+          <span v-if="!isEditing">{{ food.FoodName }}</span>
+          <input v-else v-model="formFood.FoodName" type="text" class="form-input mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+        </h3>
+        <p class="text-indigo-600 text-2xl font-bold mb-4">
+          $<span v-if="!isEditing">{{ food.Price.toFixed(2) }}</span>
+          <input v-else v-model.number="formFood.Price" type="number" step="0.01" class="form-input mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+        </p>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <p class="text-gray-700"><span class="font-semibold">Category:</span> {{ food.FoodTag }}</p>
-          <p class="text-gray-700"><span class="font-semibold">Type:</span> {{ food.FoodType }}</p>
-          <p class="text-gray-700"><span class="font-semibold">Preparation Time:</span> {{ food.TimeNeeded }} minutes</p>
-          <p class="text-gray-700"><span class="font-semibold">Availability:</span> {{ food.LongRange ? 'Delivery' : 'Pickup Only' }}</p>
+          <p class="text-gray-700">
+            <span class="font-semibold">Category:</span>
+            <span v-if="!isEditing">{{ food.FoodTag }}</span>
+            <input v-else v-model="formFood.FoodTag" type="text" class="form-input mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+          </p>
+          <p class="text-gray-700">
+            <span class="font-semibold">Type:</span>
+            <span v-if="!isEditing">{{ food.FoodType }}</span>
+            <span v-else>{{ food.FoodType }}</span>
+          </p>
+          <p class="text-gray-700">
+            <span class="font-semibold">Preparation Time:</span>
+            <span v-if="!isEditing">{{ food.TimeNeeded }} minutes</span>
+            <input v-else v-model.number="formFood.TimeNeeded" type="number" class="form-input mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+          </p>
+          <p class="text-gray-700">
+            <span class="font-semibold">Availability:</span>
+            <span v-if="!isEditing">{{ food.LongRange ? 'Delivery' : 'Pickup Only' }}</span>
+            <span v-else>{{ food.LongRange ? 'Delivery' : 'Pickup Only' }}</span>
+          </p>
 
           <p v-if="ratingLoading" class="text-gray-600 col-span-2">Loading rating...</p>
           <p v-else-if="ratingError" class="text-red-600 col-span-2">Rating Error: {{ ratingError }}</p>
@@ -56,20 +79,97 @@
 
         <div class="mb-6">
           <p class="text-gray-800 font-semibold mb-2">Description:</p>
-          <p class="text-gray-700">{{ food.Description || 'No description available.' }}</p>
+          <p v-if="!isEditing" class="text-gray-700">{{ food.Description || 'No description available.' }}</p>
+          <textarea v-else v-model="formFood.Description" rows="3" class="form-textarea mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
         </div>
 
-        <div class="mb-6" v-if="food.Ingredients">
+        <div class="mb-6">
           <p class="text-gray-800 font-semibold mb-2">Ingredients:</p>
-          <p class="text-gray-700">{{ food.Ingredients }}</p>
+          <p v-if="!isEditing" class="text-gray-700">{{ food.Ingredients || 'No ingredients listed.' }}</p>
+          <textarea v-else v-model="formFood.Ingredients" rows="2" class="form-textarea mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
         </div>
 
-        <div class="mb-6" v-if="food.Info && food.Info.Valid">
+        <div class="mb-6">
           <p class="text-gray-800 font-semibold mb-2">Additional Info:</p>
-          <p class="text-gray-700 italic">{{ food.Info.String }}</p>
+          <p v-if="!isEditing" class="text-gray-700 italic">{{ food.Info && food.Info.Valid ? food.Info.String : 'No additional info.' }}</p>
+          <textarea v-else v-model="formFood.Info" rows="2" class="form-textarea mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
+        </div>
+
+        <div v-if="userStore.isAdmin" class="mt-8 pt-4 border-t border-gray-200">
+          <h4 class="text-xl font-bold text-gray-800 mb-4">Admin Actions</h4>
+
+          <div v-if="changeLoading || deleteLoading" class="flex justify-center items-center py-4">
+            <svg class="animate-spin h-8 w-8 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="ml-3 text-lg text-gray-700">Processing action...</p>
+          </div>
+          <div v-if="changeError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong class="font-bold">Change Error!</strong>
+            <span class="block sm:inline ml-2">{{ changeError }}</span>
+          </div>
+          <div v-if="deleteError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong class="font-bold">Delete Error!</strong>
+            <span class="block sm:inline ml-2">{{ deleteError }}</span>
+          </div>
+          <div v-if="changeSuccess" class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong class="font-bold">Success!</strong>
+            <span class="block sm:inline ml-2">Food info updated!</span>
+          </div>
+          <div v-if="deleteSuccess" class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong class="font-bold">Success!</strong>
+            <span class="block sm:inline ml-2">Food deleted! Redirecting...</span>
+          </div>
+
+
+          <div v-if="!isEditing" class="flex flex-col sm:flex-row gap-4">
+            <button
+              @click="startEditing"
+              class="w-full bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition duration-200 flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              Edit Food Info
+            </button>
+            <button
+              @click="deleteFood"
+              class="w-full bg-red-600 text-white px-6 py-3 rounded-lg font-semibold text-lg hover:bg-red-700 transition duration-200 flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete Food
+            </button>
+          </div>
+
+          <div v-else class="flex flex-col sm:flex-row gap-4">
+            <button
+              @click="saveChanges"
+              :disabled="changeLoading"
+              class="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold text-lg hover:bg-green-700 transition duration-200 flex items-center justify-center"
+            >
+              <svg v-if="!changeLoading" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span v-else class="animate-pulse">Saving...</span>
+              Save Changes
+            </button>
+            <button
+              @click="cancelEditing"
+              class="w-full bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold text-lg hover:bg-gray-700 transition duration-200 flex items-center justify-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+          </div>
         </div>
 
         <button
+          v-if="!userStore.isAdmin"
           @click="addToCart(food)"
           class="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold text-lg hover:bg-green-700 transition duration-200 flex items-center justify-center mt-4"
         >
@@ -87,11 +187,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useCartStore } from '../stores/cart'; // Assuming you have a cart store
+import { useCartStore } from '../stores/cart';
+import { useUserStore } from '../stores/user'; // Import user store
 
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
+const userStore = useUserStore(); // Initialize user store
 
 const foodId = ref(null);
 const food = ref(null); // Will hold the Food object
@@ -102,7 +204,17 @@ const error = ref(null);    // Error for main food details
 const ratingLoading = ref(true); // Loading state for rating info
 const ratingError = ref(null);    // Error for rating info
 
-const userToken = ref(localStorage.getItem('userToken') || ''); // Token might be needed for some info
+const isEditing = ref(false); // NEW: State to toggle edit mode
+const formFood = ref({}); // NEW: Holds data for the edit form
+
+const changeLoading = ref(false); // NEW: Loading state for change info API
+const changeError = ref(null);    // NEW: Error state for change info API
+const changeSuccess = ref(false); // NEW: Success state for change info API
+
+const deleteLoading = ref(false); // NEW: Loading state for delete food API
+const deleteError = ref(null);    // NEW: Error state for delete food API
+const deleteSuccess = ref(false); // NEW: Success state for delete food API
+
 
 // Function to fetch food details
 const fetchFoodDetails = async () => {
@@ -120,21 +232,34 @@ const fetchFoodDetails = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // 'Authorization': `Bearer ${userToken.value}`, // Might be needed if this endpoint is protected
+        'Authorization': userStore.userToken ? `Bearer ${userStore.userToken}` : '', // Include token if available
       },
     });
 
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      food.value = data.data; // Assuming your backend returns the single Food object under 'data'
-      if (!food.value) {
-        error.value = 'Food item not found.';
-      }
-    } else {
-      error.value = data.message || 'Failed to fetch food details.';
-      // Handle 401/403 if this endpoint becomes protected in the future
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
     }
+
+    const data = await response.json();
+    food.value = data;
+
+    if (!food.value || !food.value.FoodID) {
+      error.value = 'Food item not found or invalid data received.';
+      food.value = null;
+    } else {
+        // Initialize formFood with current food data when details are loaded
+        // Ensure to handle sql.NullString fields correctly for the form
+        formFood.value = {
+            FoodName: food.value.FoodName,
+            FoodTag: food.value.FoodTag,
+            Price: food.value.Price,
+            Info: food.value.Info.Valid ? food.value.Info.String : '',
+            Ingredients: food.value.Ingredients,
+            TimeNeeded: food.value.TimeNeeded,
+        };
+    }
+
   } catch (err) {
     error.value = `Error fetching food details: ${err.message}.`;
     console.error('Error fetching food details:', err);
@@ -159,8 +284,7 @@ const fetchFoodRating = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // This endpoint probably doesn't need auth, but add if it becomes protected:
-        // 'Authorization': `Bearer ${userToken.value}`,
+        // 'Authorization': `Bearer ${userToken.value}`, // Usually not needed for public rating info
       },
     });
 
@@ -168,8 +292,8 @@ const fetchFoodRating = async () => {
 
     if (response.ok && data.success) {
       ratingInfo.value = {
-        Rating: data.rating || 0, // Default to 0 if not present
-        Times: data.times_ordered || 0 // Default to 0 if not present
+        Rating: data.rating || 0,
+        Times: data.times_ordered || 0
       };
     } else {
       ratingError.value = data.message || 'Failed to fetch rating information.';
@@ -182,11 +306,140 @@ const fetchFoodRating = async () => {
   }
 };
 
-// Add to cart functionality (assuming you have a cart store)
+// Admin Action: Start Editing
+const startEditing = () => {
+  isEditing.value = true;
+  // Deep copy food data to formFood to allow cancellation without affecting original
+  formFood.value = {
+    FoodName: food.value.FoodName,
+    FoodTag: food.value.FoodTag,
+    Price: food.value.Price,
+    Info: food.value.Info.Valid ? food.value.Info.String : '', // Handle sql.NullString
+    Ingredients: food.value.Ingredients,
+    TimeNeeded: food.value.TimeNeeded,
+  };
+  clearAdminMessages();
+};
+
+// Admin Action: Cancel Editing
+const cancelEditing = () => {
+  isEditing.value = false;
+  clearAdminMessages();
+  // No need to re-fetch if we just want to revert to original display data
+};
+
+// Admin Action: Save Changes (PUT /foods/change-info)
+const saveChanges = async () => {
+  changeLoading.value = true;
+  clearAdminMessages(); // Clear previous messages
+
+  if (!userStore.isAdmin) {
+    changeError.value = "Unauthorized: Not an admin.";
+    changeLoading.value = false;
+    return;
+  }
+
+  try {
+    const response = await fetch('http://localhost:8080/foods/change-info', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userStore.userToken}`,
+      },
+      body: JSON.stringify({
+        food_name: formFood.value.FoodName,
+        food_tag: formFood.value.FoodTag,
+        price: formFood.value.Price,
+        info: formFood.value.Info,
+        ingredients: formFood.value.Ingredients,
+        time_needed: formFood.value.TimeNeeded,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      changeSuccess.value = true;
+      isEditing.value = false; // Exit edit mode on success
+      await fetchFoodDetails(); // Re-fetch to update displayed data
+      setTimeout(() => {
+        changeSuccess.value = false; // Clear success message after a delay
+      }, 3000);
+    } else {
+      changeError.value = data.message || 'Failed to update food information.';
+      if (response.status === 401 || response.status === 403) {
+         userStore.logout();
+         router.push('/login');
+      }
+    }
+  } catch (err) {
+    changeError.value = `Network or unexpected error: ${err.message}`;
+    console.error('Error changing food info:', err);
+  } finally {
+    changeLoading.value = false;
+  }
+};
+
+// Admin Action: Delete Food (DELETE /foods)
+const deleteFood = async () => {
+  if (!confirm(`Are you sure you want to DELETE "${food.value.FoodName}"? This action cannot be undone.`)) {
+    return;
+  }
+
+  deleteLoading.value = true;
+  clearAdminMessages(); // Clear previous messages
+
+  if (!userStore.isAdmin) {
+    deleteError.value = "Unauthorized: Not an admin.";
+    deleteLoading.value = false;
+    return;
+  }
+
+  try {
+    const response = await fetch('http://localhost:8080/foods', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userStore.userToken}`,
+      },
+      body: JSON.stringify({
+        food_name: food.value.FoodName, // Use the actual food name for deletion
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      deleteSuccess.value = true;
+      alert(`Food "${food.value.FoodName}" deleted successfully!`);
+      // Redirect to the admin menu or a general menu page after deletion
+      router.push('/admin/create-food'); // Or another appropriate admin page
+    } else {
+      deleteError.value = data.message || 'Failed to delete food.';
+      if (response.status === 401 || response.status === 403) {
+         userStore.logout();
+         router.push('/login');
+      }
+    }
+  } catch (err) {
+    deleteError.value = `Network or unexpected error: ${err.message}`;
+    console.error('Error deleting food:', err);
+  } finally {
+    deleteLoading.value = false;
+  }
+};
+
+const clearAdminMessages = () => {
+    changeError.value = null;
+    changeSuccess.value = false;
+    deleteError.value = null;
+    deleteSuccess.value = false;
+};
+
+// Add to cart functionality
 const addToCart = (foodItem) => {
   cartStore.addItem(foodItem);
-  // Optional: show a temporary success message
-  cartStore.itemAddedSuccessfully = true; // Assuming cart store has this reactive prop
+  cartStore.itemAddedSuccessfully = true;
   setTimeout(() => {
     cartStore.itemAddedSuccessfully = false;
   }, 2000);
@@ -211,4 +464,8 @@ onMounted(async () => {
 
 <style scoped>
 /* Add your scoped styles here */
+/* Basic form styling for inputs/textareas */
+.form-input, .form-textarea {
+  @apply px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500;
+}
 </style>

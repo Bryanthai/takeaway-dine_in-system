@@ -117,6 +117,9 @@ SELECT * FROM orders WHERE user_id = ? AND deleted = false;
 -- name: GetAllDeletedOrdersByUser :many
 SELECT * FROM orders WHERE user_id = ? AND deleted = true;
 
+-- name: GetAllOrdersNotDone :many
+SELECT * FROM orders WHERE is_done = false AND deleted = false ORDER BY order_time DESC;
+
 -- name: UpdateOrderPayment :exec
 UPDATE orders
 SET

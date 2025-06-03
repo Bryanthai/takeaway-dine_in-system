@@ -26,8 +26,7 @@
       <router-link
         v-for="order in orders"
         :key="order.OrderID"
-        :to="{ name: 'OrderDetail', params: { id: order.OrderID }}"
-        class="group block bg-white rounded-lg shadow-md p-6 border-l-4 cursor-pointer transform transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl relative"
+        :to="{ name: 'UserOrderDetail', params: { id: order.OrderID }}" class="group block bg-white rounded-lg shadow-md p-6 border-l-4 cursor-pointer transform transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl relative"
         :class="{
           'border-green-500': order.IsDone && !order.Deleted,
           'border-yellow-500': !order.IsDone && !order.IsPaid && !order.Deleted,
@@ -35,6 +34,10 @@
           'border-red-500 bg-red-50 ring-2 ring-red-300': !order.IsDone && order.Deleted
         }"
       >
+        <pre class="hidden">{{ console.log('Current Order in v-for:', order) }}</pre>
+        <pre class="hidden">{{ console.log('OrderTime value:', order.OrderTime, 'Formatted:', formatDateTime(order.OrderTime)) }}</pre>
+        <pre class="hidden">{{ console.log('EstimatedTime value:', order.EstimatedTime, 'Formatted:', formatDateTime(order.EstimatedTime)) }}</pre>
+        <pre class="hidden">{{ console.log('OrderInfo value:', order.OrderInfo, 'Parsed:', parseOrderInfo(order.OrderInfo)) }}</pre>
         <h3 class="text-xl font-semibold text-gray-800 mb-2">Order #{{ order.OrderID }}</h3>
         <p class="text-gray-600 mb-1">
           <span class="font-medium">Status:</span>
@@ -50,7 +53,7 @@
         </p>
         <p class="text-gray-600 mb-1">
             <span class="font-medium">Order Placed:</span>
-            {{ formatDateTime(order.OrderTime.String) }}
+            {{ formatDateTime(order.OrderTime) }}
         </p>
         <p class="text-gray-600 mb-1">
             <span class="font-medium">Estimated Completion:</span>
@@ -128,43 +131,72 @@ const fetchUserOrders = async () => {
       },
     });
 
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      orders.value = data.orders || [];
-    } else {
-      error.value = data.message || 'Failed to fetch orders.';
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      error.value = errorData.message || `Failed to fetch orders (HTTP ${response.status}).`;
       if (response.status === 401 || response.status === 403) {
         error.value = "Session expired or unauthorized. Please log in again.";
         localStorage.removeItem('userToken');
         router.push('/login');
       }
+      loading.value = false;
+      return;
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      orders.value = data.orders || [];
+      console.log('API Response data.success:', data.success);
+      console.log('Fetched orders array:', orders.value); // This will show if the array is populated
+      if (orders.value.length === 0) {
+        console.log('Orders array is empty. "No Orders Found!" message should display.');
+      } else {
+        console.log('Orders array contains data. Attempting to render.');
+      }
+    } else {
+      error.value = data.message || 'Failed to fetch orders (backend reported failure).';
+      console.error('Backend reported error:', data.message);
     }
   } catch (err) {
     error.value = `An error occurred: ${err.message}. Please check your network connection.`;
-    console.error('Error fetching orders:', err);
+    console.error('Network or parsing error:', err);
   } finally {
     loading.value = false;
   }
 };
 
-const formatDateTime = (isoString) => {
+const formatDateTime = (dateValue) => {
+  if (!dateValue) return 'N/A';
+
+  let isoString;
+  if (typeof dateValue === 'object' && (dateValue.String !== undefined || dateValue.Time !== undefined)) {
+    isoString = dateValue.String || dateValue.Time;
+    if (dateValue.Valid === false) {
+        return 'N/A';
+    }
+  } else {
+    isoString = dateValue;
+  }
+
   if (!isoString) return 'N/A';
+
   try {
     const date = new Date(isoString);
     if (isNaN(date.getTime())) {
-        return 'Invalid Date';
+      console.warn('formatDateTime: Invalid date string received:', isoString);
+      return 'Invalid Date';
     }
     return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   } catch (e) {
-    console.error("Error parsing date:", isoString, e);
+    console.error("formatDateTime: Error parsing date:", isoString, e);
     return 'Invalid Date';
   }
 };
@@ -172,17 +204,18 @@ const formatDateTime = (isoString) => {
 const parseOrderInfo = (orderInfoString) => {
   try {
     if (!orderInfoString) return [];
+    if (typeof orderInfoString !== 'string') {
+        console.warn('parseOrderInfo: Expected string, got:', typeof orderInfoString, orderInfoString);
+        return [{ FoodName: "Invalid Order Info Type", Quantity: 1, Price: 0 }];
+    }
     return JSON.parse(orderInfoString);
   } catch (e) {
-    console.error("Error parsing order info:", orderInfoString, e);
+    console.error("parseOrderInfo: Error parsing JSON for order info:", orderInfoString, e);
     return [{ FoodName: "Invalid/Unreadable Order Info", Quantity: 1, Price: 0 }];
   }
 };
 
-// New method to handle payment redirection
 const goToPayment = (orderId) => {
-  // We will define this route and component later.
-  // For now, it just navigates to a placeholder.
   router.push({ name: 'PaymentPage', params: { orderId: orderId } });
 };
 

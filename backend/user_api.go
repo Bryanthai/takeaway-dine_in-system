@@ -32,6 +32,7 @@ func loginHandler(writer http.ResponseWriter, req *http.Request) {
         Token    string `json:"token"`
         ID       int32  `json:"id"`
         Username string `json:"username"`
+        IsAdmin  bool   `json:"is_admin"`
     }
 
     log.Println("Login request received")
@@ -77,7 +78,7 @@ func loginHandler(writer http.ResponseWriter, req *http.Request) {
         return
     }
 
-    resp := LoginResponse{Success: true, Message: "Login successful", Token: token, ID: account.ID, Username: account.Username}
+    resp := LoginResponse{Success: true, Message: "Login successful", Token: token, ID: account.ID, Username: account.Username, IsAdmin: account.IsAdmin}
     writer.Header().Set("Content-Type", "application/json")
     json.NewEncoder(writer).Encode(resp)
     return
@@ -525,6 +526,8 @@ func GetAllUsers(writer http.ResponseWriter, req *http.Request) {
     defer db.Close()
 
     queries := database.New(db)
+
+    log.Println("Get all users request received from admin:", username)
 
     admin, err := queries.GetAdminAccount(context.Background())
     if admin.ID != userID || admin.Username != username {

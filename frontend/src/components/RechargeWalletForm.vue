@@ -1,5 +1,6 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex items-center justify-center p-6"> <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+  <div class="min-h-screen bg-gray-100 flex items-center justify-center p-6">
+    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
       <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">Recharge Your Wallet</h2>
 
       <div v-if="loading" class="flex flex-col items-center justify-center h-48">
@@ -67,8 +68,10 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '../stores/user'; // Import the user store
 
 const router = useRouter();
+const userStore = useUserStore(); // Initialize the user store
 
 const currentBalance = ref(0);
 const rechargeAmount = ref(0);
@@ -79,13 +82,12 @@ const rechargeLoading = ref(false);
 const rechargeError = ref(null);
 const rechargeSuccess = ref(null);
 
-const userToken = ref(localStorage.getItem('userToken') || '');
-
 const fetchUserBalance = async () => {
   loading.value = true;
   fetchError.value = null;
 
-  if (!userToken.value) {
+  // Use the token from the user store
+  if (!userStore.userToken) {
     fetchError.value = 'Authentication token missing. Please log in.';
     loading.value = false;
     router.push('/login');
@@ -97,23 +99,29 @@ const fetchUserBalance = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userToken.value}`,
+        'Authorization': `Bearer ${userStore.userToken}`, // Use token from store
       },
     });
 
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      currentBalance.value = data.data.Balance;
-    } else {
-      fetchError.value = data.message || 'Failed to fetch wallet balance.';
+    // Check for network errors or non-OK status codes first
+    if (!response.ok) {
+      const errorData = await response.json(); // Attempt to parse error message from backend
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('userToken');
+        fetchError.value = errorData.message || 'Authentication failed. Please log in again.';
+        userStore.logout(); // Use user store's logout action
         router.push('/login');
+        return; // Exit function after redirect
       }
+      // For other non-OK statuses, display a generic error
+      throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
     }
+
+    // If response is OK, parse the data directly as the Account struct
+    const userData = await response.json();
+    currentBalance.value = userData.Balance; // Directly access Balance from the Account struct
+
   } catch (err) {
-    fetchError.value = `Network error: ${err.message}. Please try again.`;
+    fetchError.value = `Error fetching user balance: ${err.message}. Please try again.`;
     console.error('Error fetching user balance:', err);
   } finally {
     loading.value = false;
@@ -125,7 +133,8 @@ const rechargeWallet = async () => {
   rechargeError.value = null;
   rechargeSuccess.value = null;
 
-  if (!userToken.value) {
+  // Use the token from the user store
+  if (!userStore.userToken) {
     rechargeError.value = 'Authentication token missing. Please log in.';
     rechargeLoading.value = false;
     router.push('/login');
@@ -143,14 +152,14 @@ const rechargeWallet = async () => {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userToken.value}`,
+        'Authorization': `Bearer ${userStore.userToken}`, // Use token from store
       },
       body: JSON.stringify({
         amount: rechargeAmount.value,
       }),
     });
 
-    const data = await response.json();
+    const data = await response.json(); // Assuming recharge endpoint still returns {success: bool, message: string}
 
     if (response.ok && data.success) {
       rechargeSuccess.value = `Wallet recharged by $${rechargeAmount.value.toFixed(2)} successfully!`;
@@ -159,7 +168,7 @@ const rechargeWallet = async () => {
     } else {
       rechargeError.value = data.message || 'Failed to recharge wallet.';
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('userToken');
+        userStore.logout(); // Use user store's logout action
         router.push('/login');
       }
     }

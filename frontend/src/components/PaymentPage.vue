@@ -3,7 +3,7 @@
     <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg">
       <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">Complete Your Payment</h2>
 
-      <div v-if="loading || orderLoading || balanceLoading" class="flex flex-col items-center justify-center h-48">
+      <div v-if="orderLoading || balanceLoading" class="flex flex-col items-center justify-center h-48">
         <svg class="animate-spin h-10 w-10 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -115,7 +115,6 @@ const parseOrderInfo = (orderInfoString) => {
 // Function to fetch a specific order's details
 const fetchOrderDetail = async () => {
   orderLoading.value = true;
-  // Clear any existing error from previous attempts
   fetchError.value = null;
 
   if (!userToken.value) {
@@ -126,8 +125,6 @@ const fetchOrderDetail = async () => {
   }
 
   try {
-    // We need to fetch all orders and find the specific one for now
-    // If you add a GET /orders/:id endpoint later, it would be more efficient.
     const response = await fetch('http://localhost:8080/orders/user', {
       method: 'GET',
       headers: {
@@ -136,16 +133,28 @@ const fetchOrderDetail = async () => {
       },
     });
 
+    // Check if the response itself indicates an error before parsing JSON
+    if (!response.ok) {
+      const errorData = await response.json(); // Try to parse error message if available
+      fetchError.value = errorData.message || `Failed to fetch order details (HTTP ${response.status}).`;
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('userToken');
+        router.push('/login');
+      }
+      orderLoading.value = false;
+      return;
+    }
+
     const data = await response.json();
 
-    if (response.ok && data.success) {
+    // The /orders/user endpoint returns a {success: bool, orders: []} structure.
+    // So `data.success` IS expected here.
+    if (data.success) {
       const foundOrder = (data.orders || []).find(o => o.OrderID == orderId.value);
       if (foundOrder) {
         order.value = foundOrder;
-        // If order is already paid or deleted, prevent further action on this page
         if (order.value.IsPaid || order.value.Deleted) {
           fetchError.value = "This order is already paid or cancelled and cannot be processed further.";
-          // Redirect user if they landed here for an already processed order
           setTimeout(() => router.push('/orders'), 2000);
           return;
         }
@@ -154,10 +163,6 @@ const fetchOrderDetail = async () => {
       }
     } else {
       fetchError.value = data.message || 'Failed to fetch order details.';
-      if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('userToken');
-        router.push('/login');
-      }
     }
   } catch (err) {
     fetchError.value = `Error fetching order details: ${err.message}.`;
@@ -170,8 +175,7 @@ const fetchOrderDetail = async () => {
 // Function to fetch the current user's balance
 const fetchUserBalance = async () => {
   balanceLoading.value = true;
-  // Clear any existing error from previous attempts
-  fetchError.value = null;
+  fetchError.value = null; // Clear general fetch error, specific payment errors set below
 
   if (!userToken.value) {
     fetchError.value = 'Authentication token is missing. Cannot fetch balance.';
@@ -181,7 +185,7 @@ const fetchUserBalance = async () => {
   }
 
   try {
-    const response = await fetch('http://localhost:8080/users', { // Using GET /users
+    const response = await fetch('http://localhost:8080/users', {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -189,17 +193,24 @@ const fetchUserBalance = async () => {
       },
     });
 
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      userBalance.value = data.data.Balance; // Assuming 'data' contains the Account struct
-    } else {
-      fetchError.value = data.message || 'Failed to fetch wallet balance.';
+    // Check if the response itself indicates an error (e.g., 401, 500)
+    if (!response.ok) {
+      const errorData = await response.json(); // Try to parse error message
+      fetchError.value = errorData.message || `Failed to fetch wallet balance (HTTP ${response.status}).`;
       if (response.status === 401 || response.status === 403) {
         localStorage.removeItem('userToken');
         router.push('/login');
       }
+      balanceLoading.value = false;
+      return;
     }
+
+    // Backend returns the Account struct directly for /users
+    const accountData = await response.json();
+
+    // Now, `accountData` is the Account struct.
+    userBalance.value = accountData.Balance; // Access Balance directly from the accountData object
+
   } catch (err) {
     fetchError.value = `Error fetching balance: ${err.message}.`;
     console.error('Error fetching user balance:', err);
@@ -221,7 +232,7 @@ const processPayment = async () => {
     router.push('/login');
     return;
   }
-  if (!order.value) { // This case should be caught by initial fetchError
+  if (!order.value) {
     paymentError.value = 'Order details not loaded.';
     paymentLoading.value = false;
     return;
@@ -253,8 +264,7 @@ const processPayment = async () => {
 
     if (response.ok && data.success) {
       paymentSuccess.value = true;
-      // Optimistically update local state
-      order.value.IsPaid = true;
+      order.value.IsPaid = true; // Optimistically update local state
       userBalance.value -= totalAmount.value; // Deduct from local balance
       setTimeout(() => {
         router.push('/orders'); // Redirect to user's orders page after successful payment
@@ -290,10 +300,6 @@ onMounted(async () => {
     fetchOrderDetail(),
     fetchUserBalance()
   ]);
-
-  // If any initial fetch failed, fetchError will be set
-  // This common loading state should be good enough
-  // loading.value = false; // Not needed if using individual loading states
 });
 </script>
 

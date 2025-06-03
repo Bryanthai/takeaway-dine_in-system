@@ -31,7 +31,7 @@
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
       </svg>
-      <p class="ml-3 text-lg text-gray-700">Loading menu categories...</p>
+      <p class="ml-3 text-lg text-gray-700">Loading menu...</p>
     </div>
 
     <div v-else-if="initialError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -39,13 +39,25 @@
       <span class="block sm:inline ml-2">{{ initialError }}</span>
     </div>
 
-    <div v-else-if="foodCategories.length === 0 && recommendedFoods.length === 0" class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+    <div v-else-if="foodCategories.length === 0 && allFoods.length === 0 && recommendedFoods.length === 0" class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
       <strong class="font-bold">No Menu Items Found!</strong>
-      <span class="block sm:inline ml-2">There are no food categories or recommended items to display.</span>
+      <span class="block sm:inline ml-2">There are no food categories, all items, or recommended items to display.</span>
     </div>
 
     <div v-else>
       <div class="flex flex-wrap justify-center mb-8 border-b border-gray-300">
+        <button
+          @click="selectTab('All Food')"
+          :class="[
+            'px-6 py-3 text-lg font-semibold rounded-t-lg transition-colors duration-300',
+            activeTab === 'All Food'
+              ? 'bg-white text-indigo-700 border-indigo-500 border-t border-l border-r -mb-px'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:text-gray-900'
+          ]"
+        >
+          All Food
+        </button>
+
         <button
           v-for="(category, index) in foodCategories"
           :key="category.tag"
@@ -83,7 +95,7 @@
             <div class="w-full h-48 flex items-center justify-center bg-gray-200">
               <img
                 v-if="food.Picture && food.Picture.String"
-                :src="food.Picture.String"
+                :src="'data:image/jpeg;base64,' + food.Picture.String"
                 :alt="food.FoodName"
                 class="w-full h-full object-cover"
               />
@@ -114,6 +126,7 @@
       </div>
       <div v-else class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative text-center" role="alert">
         <span v-if="activeTab === 'Recommendations'">No recommendations available for you at the moment.</span>
+        <span v-else-if="activeTab === 'All Food'">No food items found at all.</span>
         <span v-else>No food items found for this category.</span>
       </div>
     </div>
@@ -125,21 +138,23 @@ import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useCartStore } from '../stores/cart';
 import ShoppingCart from './ShoppingCart.vue';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '../stores/user'; // Import user store
 
 const router = useRouter();
-
 const cartStore = useCartStore();
-
-const userToken = ref(localStorage.getItem('userToken') || '');
+const userStore = useUserStore(); // Initialize user store
 
 const foodCategories = ref([]);
 const recommendedFoods = ref([]);
+const allFoods = ref([]); // NEW: To store all food items
 
 const activeTab = ref(null);
 const initialLoading = ref(true);
 const initialError = ref(null);
 const recommendationsLoading = ref(false);
 const recommendationsError = ref(null);
+const allFoodsLoading = ref(false); // NEW: Loading state for all foods
+const allFoodsError = ref(null);    // NEW: Error state for all foods
 
 const isCartVisible = ref(false);
 let cartHideTimeout = null;
@@ -160,7 +175,9 @@ const hideCartOverlayDelayed = () => {
 };
 
 const currentFoodList = computed(() => {
-  if (activeTab.value === 'Recommendations') {
+  if (activeTab.value === 'All Food') {
+    return allFoods.value;
+  } else if (activeTab.value === 'Recommendations') {
     return recommendedFoods.value;
   }
   const selectedCategory = foodCategories.value.find(cat => cat.tag === activeTab.value);
@@ -168,7 +185,7 @@ const currentFoodList = computed(() => {
 });
 
 const fetchFoodByTypes = async () => {
-  initialError.value = null;
+  initialError.value = null; // Clear initial error before fetching categories
   try {
     const response = await fetch('http://localhost:8080/menu/sort-type', {
       method: 'GET',
@@ -185,9 +202,6 @@ const fetchFoodByTypes = async () => {
     const data = await response.json();
     if (data.success) {
         foodCategories.value = data.data || [];
-        if (foodCategories.value.length > 0 && activeTab.value === null) {
-            activeTab.value = foodCategories.value[0].tag;
-        }
     } else {
         throw new Error(data.message || 'Failed to fetch food categories.');
     }
@@ -201,7 +215,7 @@ const fetchRecommendedFood = async () => {
   recommendationsLoading.value = true;
   recommendationsError.value = null;
 
-  if (!userToken.value) {
+  if (!userStore.userToken) { // Use userStore.userToken
     recommendationsError.value = 'Authentication token is missing. Please log in to see recommendations.';
     recommendedFoods.value = [];
     recommendationsLoading.value = false;
@@ -213,7 +227,7 @@ const fetchRecommendedFood = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userToken.value}`,
+        'Authorization': `Bearer ${userStore.userToken}`, // Use userStore.userToken
       },
     });
 
@@ -225,9 +239,8 @@ const fetchRecommendedFood = async () => {
       recommendedFoods.value = [];
       recommendationsError.value = data.message || 'Failed to retrieve recommendations.';
       if (response.status === 401 || response.status === 403) {
-         recommendationsError.value = "Session expired or unauthorized. Please log in again.";
-         localStorage.removeItem('userToken');
-         router.push('/login');
+          userStore.logout(); // Use userStore.logout
+          router.push('/login');
       }
     }
   } catch (err) {
@@ -238,27 +251,65 @@ const fetchRecommendedFood = async () => {
   }
 };
 
+// NEW: Function to fetch all food items
+const fetchAllFood = async () => {
+  allFoodsLoading.value = true;
+  allFoodsError.value = null;
+
+  try {
+    const response = await fetch('http://localhost:8080/menu', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        // 'Authorization': `Bearer ${userStore.userToken}`, // If this endpoint requires authentication
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.success) {
+      allFoods.value = data.foods || [];
+    } else {
+      throw new Error(data.message || 'Failed to retrieve all food items.');
+    }
+  } catch (err) {
+    allFoodsError.value = `Error fetching all food items: ${err.message}`;
+    console.error('Fetch all food error:', err);
+  } finally {
+    allFoodsLoading.value = false;
+  }
+};
+
 const selectTab = (tag) => {
   activeTab.value = tag;
   if (tag === 'Recommendations' && recommendedFoods.value.length === 0 && !recommendationsLoading.value) {
       if (!recommendationsError.value || recommendationsError.value === 'Authentication token is missing. Please log in to see recommendations.') {
           fetchRecommendedFood();
       }
+  } else if (tag === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) { // NEW: Fetch all foods if not already loaded
+      fetchAllFood();
   }
 };
 
 onMounted(async () => {
-  await fetchFoodByTypes();
+  initialLoading.value = true;
+  await Promise.all([
+    fetchFoodByTypes(),
+    fetchAllFood() // Fetch all foods on initial load
+  ]);
 
-  if (activeTab.value === null) {
-      if (foodCategories.value.length > 0) {
-          activeTab.value = foodCategories.value[0].tag;
-      } else {
-          activeTab.value = 'Recommendations';
-          fetchRecommendedFood();
-      }
-  } else if (activeTab.value === 'Recommendations') {
-      fetchRecommendedFood();
+  // Determine initial active tab
+  if (foodCategories.value.length > 0) {
+    activeTab.value = foodCategories.value[0].tag;
+  } else if (allFoods.value.length > 0) {
+    activeTab.value = 'All Food';
+  } else {
+    activeTab.value = 'Recommendations';
+    fetchRecommendedFood(); // Only fetch recommendations if no other food is available initially
   }
   initialLoading.value = false;
 });
@@ -268,6 +319,8 @@ watch(activeTab, (newTab) => {
         if (!recommendationsError.value || recommendationsError.value === 'Authentication token is missing. Please log in to see recommendations.') {
             fetchRecommendedFood();
         }
+    } else if (newTab === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) { // NEW: Watch for "All Food" tab selection
+        fetchAllFood();
     }
 });
 </script>
