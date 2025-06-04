@@ -20,12 +20,11 @@
         </div>
         <div v-else>
           <p class="text-5xl font-extrabold text-indigo-900">
-            ${{ totalAverageSpending !== null ? totalAverageSpending.toFixed(2) : '0.00' }}
+            ${{ typeof totalAverageSpending === 'number' ? totalAverageSpending.toFixed(2) : '0.00' }}
           </p>
           <p class="text-md text-indigo-600 mt-2">Average amount spent by a person on a single order.</p>
         </div>
       </section>
-
 
       <section>
         <h3 class="text-3xl font-bold text-gray-800 mb-6 text-center">Current Undone Orders</h3>
@@ -54,7 +53,6 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Order ID</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User ID</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Total Price</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Status</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Ordered At</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
               </tr>
@@ -63,14 +61,11 @@
               <tr v-for="order in orders" :key="order.OrderID">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ order.OrderID }}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ order.UserID }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${{ order.TotalPrice ? order.TotalPrice.toFixed(2) : '0.00' }}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                  <span :class="getStatusBadgeClass(order.Status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize">
-                    {{ order.Status }}
-                  </span>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  ${{ typeof order.TotalPrice === 'number' ? order.TotalPrice.toFixed(2) : '0.00' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ formatDateTime(order.CreatedAt) }}
+                  {{ formatDateTime(order.OrderTime) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
@@ -104,7 +99,6 @@
   </div>
 </template>
 
-
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useUserStore } from '../stores/user';
@@ -117,19 +111,48 @@ const orders = ref([]);
 const loading = ref(true); // Loading state for undone orders
 const error = ref(null); // Error state for undone orders
 
-// FIX: Initialize totalAverageSpending to a number (0) to prevent toFixed errors
 const totalAverageSpending = ref(0);
-const totalAverageLoading = ref(true); // NEW: Loading state for total average
-const totalAverageError = ref(null); // NEW: Error state for total average
+const totalAverageLoading = ref(true); // Loading state for total average
+const totalAverageError = ref(null); // Error state for total average
+
+// Function to fetch total price for a single order
+const fetchOrderTotalPrice = async (orderId) => {
+    try {
+        const response = await fetch(`http://localhost:8080/orders/price?order_id=${orderId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${userStore.userToken}`,
+            },
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error(`AdminOrdersPage: Failed to fetch total price for OrderID ${orderId}:`, errorData.message || response.status);
+            return 0.00; // Return default if fetching fails
+        }
+
+        const data = await response.json();
+        if (data.success) {
+            return parseFloat(data.total) || 0.00;
+        } else {
+            console.error(`AdminOrdersPage: Backend reported failure for total price for OrderID ${orderId}:`, data.message);
+            return 0.00;
+        }
+    } catch (err) {
+        console.error(`AdminOrdersPage: Network or parsing error fetching total price for OrderID ${orderId}:`, err);
+        return 0.00;
+    }
+};
 
 const fetchUndoneOrders = async () => {
   console.log("AdminOrdersPage: fetchUndoneOrders called.");
-  loading.value = true; // Ensure loading is true at the start of fetch
+  loading.value = true;
   error.value = null;
 
   if (!userStore.isLoggedIn || !userStore.isAdmin) {
     error.value = "Unauthorized access. You must be an administrator to view this page.";
-    loading.value = false; // Set loading to false on immediate redirect
+    loading.value = false;
     console.warn("AdminOrdersPage: Access denied (client-side check). Redirecting to home.");
     router.push('/');
     return;
@@ -147,27 +170,42 @@ const fetchUndoneOrders = async () => {
 
     console.log("AdminOrdersPage: Fetch undone orders response received. Status:", response.status);
 
-    if (!response.ok) { // Handle non-2xx responses
-      const errorData = await response.json().catch(() => ({})); // Try to parse error data
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       error.value = errorData.message || `Failed to fetch undone orders. HTTP Status: ${response.status}`;
       console.error("AdminOrdersPage: API error fetching undone orders:", error.value, errorData);
 
       if (response.status === 401 || response.status === 403) {
-           console.warn("AdminOrdersPage: Unauthorized/Forbidden for undone orders. Logging out and redirecting.");
-           userStore.logout();
-           router.push('/login');
-       }
-       return; // Exit here if response was not ok
+        console.warn("AdminOrdersPage: Unauthorized/Forbidden for undone orders. Logging out and redirecting.");
+        userStore.logout();
+        router.push('/login');
+      }
+      return;
     }
 
     const data = await response.json();
-    console.log("AdminOrdersPage: Raw response data for undone orders:", data);
+    // Log the entire raw response data for undone orders for comprehensive debugging
+    console.log("AdminOrdersPage: Raw response data for undone orders:", JSON.stringify(data, null, 2));
 
     if (data.success) {
-      orders.value = data.orders || [];
-      console.log("AdminOrdersPage: Undone orders fetched successfully. Count:", orders.value.length);
+      const fetchedOrders = await Promise.all((data.orders || []).map(async order => {
+        const totalPrice = await fetchOrderTotalPrice(order.OrderID);
+        
+        // IMPORTANT: Log the raw OrderTime object received for each order
+        console.log(`OrderID ${order.OrderID}: Raw OrderTime data received:`, order.OrderTime);
+
+        return {
+          OrderID: order.OrderID,
+          UserID: order.UserID,
+          TotalPrice: totalPrice,
+          OrderTime: order.OrderTime, // Pass the entire sql.NullTime object as received
+        };
+      }));
+      orders.value = fetchedOrders;
+
+      console.log("AdminOrdersPage: Processed undone orders:", orders.value);
       if (orders.value.length === 0) {
-        console.log("AdminOrdersPage: No undone orders found.");
+        console.log("AdminOrdersPage: No undone orders found after processing.");
       }
     } else {
       error.value = data.message || 'Failed to fetch undone orders (backend reported failure).';
@@ -177,12 +215,11 @@ const fetchUndoneOrders = async () => {
     error.value = `Error fetching undone orders: ${err.message}. Please check your network connection and backend server.`;
     console.error('AdminOrdersPage: Network or parsing error fetching undone orders:', err);
   } finally {
-    loading.value = false; // Always set loading to false in finally
+    loading.value = false;
     console.log("AdminOrdersPage: fetchUndoneOrders finished. loading set to false.");
   }
 };
 
-// Function to fetch total average spending
 const fetchTotalAverageSpending = async () => {
   console.log("AdminOrdersPage: fetchTotalAverageSpending called.");
   totalAverageLoading.value = true;
@@ -206,7 +243,7 @@ const fetchTotalAverageSpending = async () => {
 
     console.log("AdminOrdersPage: Fetch total average response received. Status:", response.status);
 
-    if (!response.ok) { // Handle non-2xx responses
+    if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       totalAverageError.value = errorData.message || `Failed to fetch total average spending. Status: ${response.status}`;
       console.error("AdminOrdersPage: API error fetching total average spending:", totalAverageError.value, errorData);
@@ -222,22 +259,19 @@ const fetchTotalAverageSpending = async () => {
     console.log("AdminOrdersPage: Raw response data for total average:", data);
 
     if (data.success) {
-      // FIX: Ensure data.Average is a number, default to 0 if not
-      totalAverageSpending.value = typeof data.Average === 'number' ? data.Average : 0;
-      console.log("AdminOrdersPage: Total average spending fetched:", totalAverageSpending.value);
+      totalAverageSpending.value = parseFloat(data.average) || 0.00;
+      console.log("AdminOrdersPage: Total average spending fetched and parsed:", totalAverageSpending.value);
     } else {
       totalAverageError.value = data.message || 'Failed to fetch total average spending (backend reported failure).';
       console.error("AdminOrdersPage: Backend reported failure for total average spending:", data.message);
-      // FIX: Set totalAverageSpending to 0 in case of backend failure
       totalAverageSpending.value = 0;
     }
   } catch (err) {
     totalAverageError.value = `Error fetching total average spending: ${err.message}.`;
     console.error('AdminOrdersPage: Network error fetching total average spending:', err);
-    // FIX: Set totalAverageSpending to 0 in case of network/parsing error
     totalAverageSpending.value = 0;
   } finally {
-    totalAverageLoading.value = false; // Always set loading to false in finally
+    totalAverageLoading.value = false;
     console.log("AdminOrdersPage: fetchTotalAverageSpending finished. loading set to false.");
   }
 };
@@ -305,32 +339,64 @@ const deleteOrder = async (orderId) => {
   }
 };
 
-// FIX: Added a null/undefined check for 'status'
-const getStatusBadgeClass = (status) => {
-  // Default to an empty string if status is null or undefined to prevent .toLowerCase() error
-  const safeStatus = (status || '').toLowerCase(); 
-  switch (safeStatus) {
-    case 'pending': return 'bg-yellow-100 text-yellow-800';
-    case 'processing': return 'bg-blue-100 text-blue-800';
-    case 'ready': return 'bg-purple-100 text-purple-800';
-    case 'shipped': return 'bg-indigo-100 text-indigo-800';
-    case 'delivered': return 'bg-green-100 text-green-800';
-    case 'cancelled': return 'bg-red-100 text-red-800';
-    default: return 'bg-gray-100 text-gray-800'; // Fallback for 'unknown' or other unexpected values
-  }
-};
+const formatDateTime = (sqlNullTimeObject) => {
+  // console.log("formatDateTime received:", sqlNullTimeObject); // Keep this uncommented for debugging
 
-const formatDateTime = (isoString) => {
-  if (!isoString) return 'N/A';
-  try {
-    const date = new Date(isoString);
-    return date.toLocaleString();
-  } catch (e) {
-    console.error("Error formatting date:", e);
-    return isoString;
+  // Check if sqlNullTimeObject is an object and has a Valid property (standard sql.NullTime JSON)
+  if (sqlNullTimeObject && typeof sqlNullTimeObject.Valid === 'boolean') {
+    if (sqlNullTimeObject.Valid) {
+      try {
+        const date = new Date(sqlNullTimeObject.Time);
+        // Check if the date object is valid (i.e., not "Invalid Date")
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleString('en-SG', { // Using 'en-SG' for Singapore locale
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false // Use 24-hour format
+          });
+        } else {
+          console.warn("formatDateTime: new Date() created an invalid date from:", sqlNullTimeObject.Time);
+        }
+      } catch (e) {
+        console.error("formatDateTime: Error parsing date from sql.NullTime.Time:", e, sqlNullTimeObject.Time);
+      }
+    } else {
+      // If Valid is false, it means the database value was NULL
+      console.log("formatDateTime: OrderTime is NULL in the database (Valid: false).");
+    }
+  } else if (typeof sqlNullTimeObject === 'string' && sqlNullTimeObject) {
+      // Fallback for cases where backend might directly marshal time.Time as a string (e.g., if it's not sql.NullTime, or custom marshalling)
+      try {
+          const date = new Date(sqlNullTimeObject);
+          if (!isNaN(date.getTime())) {
+              return date.toLocaleString('en-SG', {
+                year: 'numeric',
+                month: 'numeric',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+              });
+          } else {
+            console.warn("formatDateTime: new Date() created an invalid date from direct string:", sqlNullTimeObject);
+          }
+      } catch (e) {
+          console.error("formatDateTime: Error parsing date from direct string:", e, sqlNullTimeObject);
+      }
+  } else if (sqlNullTimeObject === null) {
+      console.log("formatDateTime: OrderTime received as explicit null.");
+  } else {
+      console.warn("formatDateTime: Unexpected format for OrderTime:", sqlNullTimeObject);
   }
-};
 
+  // Default message if the date is not valid, not present, or has an unexpected format
+  return 'Not recorded yet'; 
+};
 
 onMounted(() => {
   console.log("AdminOrdersPage: Component mounted.");

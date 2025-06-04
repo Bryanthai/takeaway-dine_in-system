@@ -95,8 +95,7 @@
             <div class="w-full h-48 flex items-center justify-center bg-gray-200">
               <img
                 v-if="food.Picture && food.Picture.String"
-                :src="'data:image/jpeg;base64,' + food.Picture.String"
-                :alt="food.FoodName"
+                :src="food.Picture.String" :alt="food.FoodName"
                 class="w-full h-full object-cover"
               />
               <div v-else class="w-full h-full bg-gray-400 flex items-center justify-center text-gray-600 text-xl font-semibold">
@@ -138,23 +137,23 @@ import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useCartStore } from '../stores/cart';
 import ShoppingCart from './ShoppingCart.vue';
 import { useRouter } from 'vue-router';
-import { useUserStore } from '../stores/user'; // Import user store
+import { useUserStore } from '../stores/user';
 
 const router = useRouter();
 const cartStore = useCartStore();
-const userStore = useUserStore(); // Initialize user store
+const userStore = useUserStore();
 
 const foodCategories = ref([]);
 const recommendedFoods = ref([]);
-const allFoods = ref([]); // NEW: To store all food items
+const allFoods = ref([]);
 
 const activeTab = ref(null);
 const initialLoading = ref(true);
 const initialError = ref(null);
 const recommendationsLoading = ref(false);
 const recommendationsError = ref(null);
-const allFoodsLoading = ref(false); // NEW: Loading state for all foods
-const allFoodsError = ref(null);    // NEW: Error state for all foods
+const allFoodsLoading = ref(false);
+const allFoodsError = ref(null);
 
 const isCartVisible = ref(false);
 let cartHideTimeout = null;
@@ -185,7 +184,7 @@ const currentFoodList = computed(() => {
 });
 
 const fetchFoodByTypes = async () => {
-  initialError.value = null; // Clear initial error before fetching categories
+  initialError.value = null;
   try {
     const response = await fetch('http://localhost:8080/menu/sort-type', {
       method: 'GET',
@@ -203,7 +202,7 @@ const fetchFoodByTypes = async () => {
     if (data.success) {
         foodCategories.value = data.data || [];
     } else {
-        throw new Error(data.message || 'Failed to fetch food categories.');
+      throw new Error(data.message || 'Failed to fetch food categories.');
     }
   } catch (err) {
     initialError.value = `Failed to load menu categories: ${err.message}`;
@@ -215,7 +214,7 @@ const fetchRecommendedFood = async () => {
   recommendationsLoading.value = true;
   recommendationsError.value = null;
 
-  if (!userStore.userToken) { // Use userStore.userToken
+  if (!userStore.userToken) {
     recommendationsError.value = 'Authentication token is missing. Please log in to see recommendations.';
     recommendedFoods.value = [];
     recommendationsLoading.value = false;
@@ -227,7 +226,7 @@ const fetchRecommendedFood = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userStore.userToken}`, // Use userStore.userToken
+        'Authorization': `Bearer ${userStore.userToken}`,
       },
     });
 
@@ -239,7 +238,7 @@ const fetchRecommendedFood = async () => {
       recommendedFoods.value = [];
       recommendationsError.value = data.message || 'Failed to retrieve recommendations.';
       if (response.status === 401 || response.status === 403) {
-          userStore.logout(); // Use userStore.logout
+          userStore.logout();
           router.push('/login');
       }
     }
@@ -251,7 +250,6 @@ const fetchRecommendedFood = async () => {
   }
 };
 
-// NEW: Function to fetch all food items
 const fetchAllFood = async () => {
   allFoodsLoading.value = true;
   allFoodsError.value = null;
@@ -261,7 +259,6 @@ const fetchAllFood = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // 'Authorization': `Bearer ${userStore.userToken}`, // If this endpoint requires authentication
       },
     });
 
@@ -290,7 +287,7 @@ const selectTab = (tag) => {
       if (!recommendationsError.value || recommendationsError.value === 'Authentication token is missing. Please log in to see recommendations.') {
           fetchRecommendedFood();
       }
-  } else if (tag === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) { // NEW: Fetch all foods if not already loaded
+  } else if (tag === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) {
       fetchAllFood();
   }
 };
@@ -299,17 +296,16 @@ onMounted(async () => {
   initialLoading.value = true;
   await Promise.all([
     fetchFoodByTypes(),
-    fetchAllFood() // Fetch all foods on initial load
+    fetchAllFood()
   ]);
 
-  // Determine initial active tab
   if (foodCategories.value.length > 0) {
     activeTab.value = foodCategories.value[0].tag;
   } else if (allFoods.value.length > 0) {
     activeTab.value = 'All Food';
   } else {
     activeTab.value = 'Recommendations';
-    fetchRecommendedFood(); // Only fetch recommendations if no other food is available initially
+    fetchRecommendedFood();
   }
   initialLoading.value = false;
 });
@@ -319,7 +315,7 @@ watch(activeTab, (newTab) => {
         if (!recommendationsError.value || recommendationsError.value === 'Authentication token is missing. Please log in to see recommendations.') {
             fetchRecommendedFood();
         }
-    } else if (newTab === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) { // NEW: Watch for "All Food" tab selection
+    } else if (newTab === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) {
         fetchAllFood();
     }
 });

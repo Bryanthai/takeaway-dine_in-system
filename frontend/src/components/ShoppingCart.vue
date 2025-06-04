@@ -16,7 +16,7 @@
       <li v-for="item in cartStore.items" :key="item.food.FoodID" class="py-3 flex items-center">
         <img
           v-if="item.food.Picture && item.food.Picture.String"
-          :src="'data:image/jpeg;base64,' + item.food.Picture.String"
+          :src="item.food.Picture.String"
           :alt="item.food.FoodName"
           class="w-16 h-16 object-cover rounded-md mr-3 shadow-sm"
         />
@@ -59,9 +59,30 @@
       </label>
     </div>
 
+    <div v-if="isDelivery" class="mt-4">
+      <label class="inline-flex items-center mb-2">
+        <input
+          type="checkbox"
+          v-model="useRegisteredAddress"
+          @change="toggleRegisteredAddress"
+          class="form-checkbox h-5 w-5 text-indigo-600 transition duration-150 ease-in-out"
+        />
+        <span class="ml-2 text-gray-700 font-medium">Deliver to my registered address</span>
+      </label>
+      <label for="deliveryAddress" class="block text-sm font-medium text-gray-700">Delivery Address</label>
+      <input
+        type="text"
+        id="deliveryAddress"
+        v-model="deliveryAddress"
+        :disabled="useRegisteredAddress"
+        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+        placeholder="Enter delivery address"
+      />
+    </div>
+
     <button
       @click="checkout"
-      :disabled="cartStore.items.length === 0 || checkoutLoading"
+      :disabled="cartStore.items.length === 0 || checkoutLoading || (isDelivery && !deliveryAddress)"
       class="mt-6 w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
     >
       <svg v-if="checkoutLoading" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -81,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useCartStore } from '../stores/cart';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../stores/user';
@@ -100,14 +121,74 @@ const router = useRouter();
 const userStore = useUserStore();
 
 const isDelivery = ref(false);
+const deliveryAddress = ref('');
+const useRegisteredAddress = ref(false); // New ref for the checkbox
 const checkoutLoading = ref(false);
 const checkoutSuccess = ref(false);
 const checkoutError = ref(null);
+
+// Watch for changes in `isDelivery` to reset `useRegisteredAddress`
+watch(isDelivery, (newValue) => {
+  if (!newValue) {
+    useRegisteredAddress.value = false;
+    deliveryAddress.value = ''; // Clear delivery address if delivery is unchecked
+  }
+});
+
+// Function to fetch user data
+const fetchUserData = async () => {
+  if (!userStore.userToken) {
+    return null;
+  }
+  try {
+    const response = await fetch('http://localhost:8080/users', {
+      headers: {
+        'Authorization': `Bearer ${userStore.userToken}`,
+      },
+    });
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        userStore.logout();
+        router.push('/login');
+      }
+      throw new Error('Failed to fetch user data');
+    }
+    const data = await response.json();
+    return data; // Assuming the API returns the Account struct directly
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    checkoutError.value = 'Failed to load user address.';
+    return null;
+  }
+};
+
+// Toggle registered address functionality
+const toggleRegisteredAddress = async () => {
+  if (useRegisteredAddress.value) {
+    const userData = await fetchUserData();
+    if (userData && userData.Address) {
+      deliveryAddress.value = userData.Address;
+    } else {
+      deliveryAddress.value = '';
+      useRegisteredAddress.value = false; // Uncheck if address not found
+      checkoutError.value = 'No registered address found or failed to fetch.';
+    }
+  } else {
+    deliveryAddress.value = ''; // Clear address if checkbox is unchecked
+  }
+};
 
 const checkout = async () => {
   checkoutLoading.value = true;
   checkoutSuccess.value = false;
   checkoutError.value = null;
+
+  // Validate delivery address if delivery is selected
+  if (isDelivery.value && !deliveryAddress.value.trim()) {
+    checkoutError.value = 'Please enter a delivery address.';
+    checkoutLoading.value = false;
+    return;
+  }
 
   // Ensure user is logged in (token exists)
   if (!userStore.userToken) {
@@ -134,11 +215,12 @@ const checkout = async () => {
     quantity: item.quantity,
   }));
 
-  // Construct the request body WITHOUT the user_id field
+  // Construct the request body including delivery_address
   const requestBody = {
     order_info: orderInfoString,
     is_ranged: isDelivery.value,
     order_items: orderItems,
+    delivery_address: isDelivery.value ? deliveryAddress.value.trim() : "", // Send address only if delivery is true
   };
 
   console.log('Sending order request:', JSON.stringify(requestBody, null, 2));

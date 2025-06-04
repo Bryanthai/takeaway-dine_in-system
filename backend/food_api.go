@@ -7,6 +7,8 @@ import(
 	"context"
     "log"
     "fmt"
+    "io"
+    "os"
 
 	"github.com/Bryanthai/ordersystem/internal/database"
     "github.com/Bryanthai/ordersystem/internal/auth"
@@ -19,7 +21,7 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
         writer.WriteHeader(http.StatusOK)
         return
     }
-    
+
     token, err := auth.GetBearerToken(req.Header)
     if err != nil {
         http.Error(writer, "Invalid or missing token", http.StatusUnauthorized)
@@ -34,24 +36,52 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
 
     log.Println("Create food request received from user:", username)
 
-    type CreateFoodRequest struct {
-        FoodName    string  `json:"food_name"`
-        FoodTag     string  `json:"food_tag"`
-        Price       float64 `json:"price"`
-        Image       string  `json:"image"`
-        Info        string  `json:"info"`
-        Ingredients string  `json:"ingredients"`
-        TimeNeeded  int32 `json:"time_needed"`
-    }
     type CreateFoodResponse struct {
         Success bool   `json:"success"`
         Message string `json:"message"`
     }
 
-    var foodReq CreateFoodRequest
-    if err := json.NewDecoder(req.Body).Decode(&foodReq); err != nil {
-        http.Error(writer, "Invalid request body", http.StatusBadRequest)
+    err = req.ParseMultipartForm(10 << 20)
+    if err != nil {
+        http.Error(writer, "Invalid form data", http.StatusBadRequest)
         return
+    }
+
+    foodName := req.FormValue("food_name")
+    foodTag := req.FormValue("food_tag")
+    priceStr := req.FormValue("price")
+    info := req.FormValue("info")
+    ingredients := req.FormValue("ingredients")
+    timeNeededStr := req.FormValue("time_needed")
+    description := req.FormValue("description")
+
+    var price float64
+    var timeNeeded int32
+    if priceStr != "" {
+        _, err = fmt.Sscanf(priceStr, "%f", &price)
+        if err != nil {
+            http.Error(writer, "Invalid price", http.StatusBadRequest)
+            return
+        }
+    }
+    if timeNeededStr != "" {
+        _, err = fmt.Sscanf(timeNeededStr, "%d", &timeNeeded)
+        if err != nil {
+            http.Error(writer, "Invalid time_needed", http.StatusBadRequest)
+            return
+        }
+    }
+
+    var imageFilename string
+    file, handler, err := req.FormFile("image")
+    if err == nil && handler != nil {
+        imageFilename = "http://localhost:8080/images/" + handler.Filename
+        defer file.Close()
+        out, _ := os.Create("./static/images/food/" + handler.Filename)
+        io.Copy(out, file)
+        file.Close()
+    } else {
+        imageFilename = ""
     }
 
     db, err := sql.Open("mysql", dbURL)
@@ -69,19 +99,36 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
         return
     }
 
-	var infoStruct sql.NullString
-	infoStruct.String = foodReq.Info
-	infoStruct.Valid = foodReq.Info != ""
+    var infoStruct sql.NullString
+    infoStruct.String = info
+    infoStruct.Valid = info != ""
 
     err = queries.CreateFood(context.Background(), database.CreateFoodParams{
-        FoodName:    foodReq.FoodName,
-        FoodTag:     foodReq.FoodTag,
-        Price:       foodReq.Price,
-        Picture:     sql.NullString{String: foodReq.Image, Valid: foodReq.Image != ""},
+        FoodName:    foodName,
+        Price:       price,
+        Picture:     sql.NullString{String: imageFilename, Valid: imageFilename != ""},
         Info:        infoStruct,
-        Ingredients: foodReq.Ingredients,
-        TimeNeeded:  foodReq.TimeNeeded,
+        Ingredients: ingredients,
+        TimeNeeded:  timeNeeded,
+        Description: description,
     })
+
+    tagSlice := removeWhiteSpace(foodTag)
+    if len(tagSlice) == 0 {
+        http.Error(writer, "Food tag cannot be empty", http.StatusBadRequest)
+        return
+    }
+    for _, tag := range tagSlice {
+        err = queries.NewTag(context.Background(), database.NewTagParams{
+            Tag:      tag,
+            FoodName: foodName,
+        })
+        if err != nil {
+            http.Error(writer, "Failed to create food tag", http.StatusInternalServerError)
+            return
+        }
+    }
+
     if err != nil {
         http.Error(writer, "Failed to create food item", http.StatusInternalServerError)
         return
@@ -90,7 +137,7 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
     resp := CreateFoodResponse{Success: true, Message: "Food item created successfully"}
     writer.Header().Set("Content-Type", "application/json")
     json.NewEncoder(writer).Encode(resp)
-	return
+    return
 }
 
 
@@ -155,7 +202,6 @@ func alterFoodHandler(writer http.ResponseWriter, req *http.Request) {
 	infoStruct.Valid = foodReq.Info != ""
 
     err = queries.AlterFood(context.Background(), database.AlterFoodParams{
-        FoodTag:     foodReq.FoodTag,
         Price:       foodReq.Price,
         Info:        infoStruct,
         Ingredients: foodReq.Ingredients,
@@ -165,6 +211,30 @@ func alterFoodHandler(writer http.ResponseWriter, req *http.Request) {
     if err != nil {
         http.Error(writer, "Failed to update food item", http.StatusInternalServerError)
         return
+    }
+
+    tagSlice := removeWhiteSpace(foodReq.FoodTag)
+    if len(tagSlice) == 0 {
+        http.Error(writer, "Food tag cannot be empty", http.StatusBadRequest)
+        return
+    }
+
+    err = queries.DeleteTag(context.Background(), foodReq.FoodName)
+    if err != nil {
+        http.Error(writer, "Failed to delete existing food tags", http.StatusInternalServerError)
+        return
+    }
+
+    for _, tag := range tagSlice {
+        err = queries.NewTag(context.Background(), database.NewTagParams{
+            Tag:      tag,
+            FoodName: foodReq.FoodName,
+        })
+
+        if err != nil {
+            http.Error(writer, "Failed to update food tag", http.StatusInternalServerError)
+            return
+        }
     }
 
     resp := AlterFoodResponse{Success: true, Message: "Food item updated successfully"}

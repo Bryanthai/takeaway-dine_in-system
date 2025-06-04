@@ -39,28 +39,32 @@
             </span>
           </p>
           <p class="text-gray-700">
-              <span class="font-medium">Order Placed:</span>
-              {{ formatDateTime(order.OrderTime.String) }}
+            <span class="font-medium">Order Placed:</span>
+            {{ formatDateTime(order.OrderTime.Valid ? order.OrderTime.Time : null) }}
           </p>
           <p class="text-gray-700">
-              <span class="font-medium">Estimated Completion:</span>
-              {{ formatDateTime(order.EstimatedTime) }}
+            <span class="font-medium">Estimated Completion:</span>
+            {{ formatDateTime(order.EstimatedTime) }}
           </p>
           <p class="text-gray-700">
-              <span class="font-medium">Delivery:</span>
-              {{ order.IsRanged ? 'Delivery' : 'Pickup' }}
+            <span class="font-medium">Type:</span>
+            {{ order.IsRanged ? 'Delivery' : 'Pickup' }}
+          </p>
+          <p v-if="order.IsRanged && order.DeliveryAddress && order.DeliveryAddress.Valid" class="text-gray-700">
+            <span class="font-medium">Delivery Address:</span>
+            {{ order.DeliveryAddress.String }}
           </p>
           <p class="text-gray-700">
-              <span class="font-medium">Paid:</span>
-              <span :class="{'text-green-600 font-bold': order.IsPaid, 'text-red-600 font-bold': !order.IsPaid}">
-                  {{ order.IsPaid ? 'Yes' : 'No' }}
-              </span>
+            <span class="font-medium">Paid:</span>
+            <span :class="{'text-green-600 font-bold': order.IsPaid, 'text-red-600 font-bold': !order.IsPaid}">
+              {{ order.IsPaid ? 'Yes' : 'No' }}
+            </span>
           </p>
           <p class="text-gray-700">
-              <span class="font-medium">Deleted:</span>
-              <span :class="{'text-red-600 font-bold': order.Deleted, 'text-green-600 font-bold': !order.Deleted}">
-                  {{ order.Deleted ? 'Yes' : 'No' }}
-              </span>
+            <span class="font-medium">Deleted:</span>
+            <span :class="{'text-red-600 font-bold': order.Deleted, 'text-green-600 font-bold': !order.Deleted}">
+              {{ order.Deleted ? 'Yes' : 'No' }}
+            </span>
           </p>
           <div class="md:col-span-2">
             <p class="text-gray-700 font-medium mt-2">Order Info (Summary):</p>
@@ -73,12 +77,12 @@
         </div>
       </div>
 
-      <div class="mb-8 pb-8 border-b border-gray-200">
+      <div v-if="order.IsDone" class="mb-8 pb-8 border-b border-gray-200">
         <h3 class="text-2xl font-semibold text-gray-800 mb-4">Provide Order Feedback</h3>
         <div v-if="order.Feedback.Valid" class="mb-4">
-            <p class="text-gray-700 font-medium">Your current feedback:</p>
-            <p class="text-gray-600 italic border border-gray-300 p-3 rounded-md bg-gray-50">"{{ order.Feedback.String }}"</p>
-            <p class="text-sm text-gray-500 mt-1">You can submit new feedback below to update it.</p>
+          <p class="text-gray-700 font-medium">Your current feedback:</p>
+          <p class="text-gray-600 italic border border-gray-300 p-3 rounded-md bg-gray-50">"{{ order.Feedback.String }}"</p>
+          <p class="text-sm text-gray-500 mt-1">You can submit new feedback below to update it.</p>
         </div>
         <textarea
           v-model="orderFeedback"
@@ -98,8 +102,7 @@
           <span v-if="feedbackError" class="text-red-600 text-sm">{{ feedbackError }}</span>
         </div>
       </div>
-
-      <div>
+      <div v-if="order.IsDone">
         <h3 class="text-2xl font-semibold text-gray-800 mb-4">Rate Ordered Items</h3>
         <div v-if="itemsLoading" class="flex justify-center items-center h-24">
           <svg class="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -145,7 +148,7 @@
           </ul>
         </div>
       </div>
-    </div>
+      </div>
   </div>
 </template>
 
@@ -175,20 +178,23 @@ const feedbackError = ref(null);
 
 // Helper functions
 const formatDateTime = (isoString) => {
-  if (!isoString) return 'N/A';
+  if (!isoString) return 'N/A'; // Check if isoString is null or empty
   try {
     const date = new Date(isoString);
     if (isNaN(date.getTime())) {
       return 'Invalid Date';
     }
-    return date.toLocaleString('en-US', {
+    // Set options for Singapore time zone (SGT, GMT+8)
+    const options = {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true
-    });
+        hour12: true,
+        timeZone: 'Asia/Singapore' // Specify Singapore time zone
+    };
+    return date.toLocaleString('en-US', options);
   } catch (e) {
     console.error("Error parsing date:", isoString, e);
     return 'Invalid Date';
@@ -319,6 +325,12 @@ const submitOrderFeedback = async () => {
     feedbackLoading.value = false;
     return;
   }
+  // Added check for order status
+  if (!order.value || !order.value.IsDone) {
+    feedbackError.value = 'Feedback can only be submitted for completed orders.';
+    feedbackLoading.value = false;
+    return;
+  }
   if (!orderFeedback.value.trim()) {
     feedbackError.value = 'Feedback cannot be empty.';
     feedbackLoading.value = false;
@@ -375,6 +387,12 @@ const submitItemRating = async (item) => {
   }
   if (!item.newRating || item.newRating < 1 || item.newRating > 5) {
     item.ratingError = 'Please select a rating between 1 and 5.';
+    item.ratingLoading = false;
+    return;
+  }
+  // Added check for order status
+  if (!order.value || !order.value.IsDone) {
+    item.ratingError = 'Ratings can only be submitted for completed orders.';
     item.ratingLoading = false;
     return;
   }

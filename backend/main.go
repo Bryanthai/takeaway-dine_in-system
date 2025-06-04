@@ -33,6 +33,7 @@ func initServeMux(serveMux *http.ServeMux) {
 	serveMux.HandleFunc("PUT /orders/feedback", UpdateFeedback) //done
 	serveMux.HandleFunc("GET /orders/items", getOrderedItemsHandler) //done
 	serveMux.HandleFunc("PUT /orders/finish", finishOrder) //done
+	serveMux.HandleFunc("GET /orders/price", GetOrderTotalPrice) //done
 
 	serveMux.HandleFunc("GET /menu", getAllFoodHandler) //done
 	serveMux.HandleFunc("GET /menu/rating-times-info", getFoodRatingandOrderedTimesByFoodID) //done
@@ -44,6 +45,8 @@ func initServeMux(serveMux *http.ServeMux) {
 	serveMux.HandleFunc("GET /admin/total-average", GetAverageSpendingAll) //done
 	serveMux.HandleFunc("GET /admin/total-average-by-user", GetAverageSpendingByUser) //done
 	serveMux.HandleFunc("GET /admin/orders-all", getAllOrdersHandler) //done
+
+	serveMux.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("./static/images/food"))))
 }
 
 func main() {

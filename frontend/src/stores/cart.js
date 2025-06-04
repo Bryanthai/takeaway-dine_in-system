@@ -36,6 +36,24 @@ export const useCartStore = defineStore('cart', () => {
     }
   }
 
+  // NEW ACTIONS: incrementItem and decrementItem
+  function incrementItem(foodId) {
+    const item = items.value.find(item => item.food.FoodID === foodId);
+    if (item) {
+      item.quantity++;
+    }
+  }
+
+  function decrementItem(foodId) {
+    const item = items.value.find(item => item.food.FoodID === foodId);
+    if (item) {
+      item.quantity--;
+      if (item.quantity <= 0) {
+        removeItem(foodId); // Remove if quantity drops to 0 or less
+      }
+    }
+  }
+
   function clearCart() {
     items.value = [];
   }
@@ -47,6 +65,8 @@ export const useCartStore = defineStore('cart', () => {
     addItem,
     removeItem,
     updateQuantity,
+    incrementItem, // EXPOSE NEW ACTION
+    decrementItem, // EXPOSE NEW ACTION
     clearCart,
   };
 });

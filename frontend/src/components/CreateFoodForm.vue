@@ -58,7 +58,7 @@
             :class="{ 'border-red-500': errors.image }"
           />
           <p v-if="errors.image" class="mt-1 text-sm text-red-600">{{ errors.image }}</p>
-          <p v-if="formData.image" class="mt-2 text-sm text-gray-500">Image selected. Ready for upload.</p>
+          <p v-if="selectedImageName" class="mt-2 text-sm text-gray-500">Image selected: {{ selectedImageName }}</p>
         </div>
 
         <div>
@@ -142,23 +142,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive } from 'vue';
 
 // --- IMPORTANT: Get token from localStorage instead of dummy ---
-// This assumes your login page (LoginForm.vue) successfully saves the token
-// into localStorage under the key 'userToken'.
 const userToken = ref(localStorage.getItem('userToken') || '');
 
-
-// Form data structure matching CreateFoodRequest
+// Form data structure. `image` will now hold the File object directly.
 const formData = reactive({
   food_name: '',
   food_tag: '',
   price: null,
-  image: '',
+  image: null, // Changed to null, will hold the File object
   info: '',
+  description: '', // Added description to formData
   ingredients: '',
-  time_needed: 1,
+  time_needed: null, // Changed to null, will hold the number
 });
 
 const errors = reactive({
@@ -174,39 +172,29 @@ const errors = reactive({
 const loading = ref(false);
 const responseMessage = ref('');
 const createSuccess = ref(false);
+const selectedImageName = ref(''); // To display the selected file name
 
-// No need for onMounted to set token if we get it directly from localStorage at ref initialization
-// onMounted(() => {
-//   // In a real app, you'd fetch this from your auth store and ensure it's an admin token
-//   userToken.value = dummyAdminToken; // REMOVE THIS LINE
-// });
-
-// Handles file input and converts image to Base64
+// Handles file input and stores the File object
 const handleImageUpload = (event) => {
   const file = event.target.files[0];
   if (!file) {
-    formData.image = '';
+    formData.image = null;
     errors.image = '';
+    selectedImageName.value = '';
     return;
   }
 
   // Basic file type validation
   if (!file.type.startsWith('image/')) {
     errors.image = 'Please select an image file.';
-    formData.image = '';
+    formData.image = null;
+    selectedImageName.value = '';
     return;
   }
 
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    formData.image = reader.result.split(',')[1];
-    errors.image = '';
-  };
-  reader.onerror = () => {
-    errors.image = 'Failed to read image file.';
-    formData.image = '';
-  };
-  reader.readAsDataURL(file);
+  formData.image = file; // Store the File object directly
+  selectedImageName.value = file.name; // Store the file name for display
+  errors.image = ''; // Clear any previous image errors
 };
 
 const validateForm = () => {
@@ -228,6 +216,10 @@ const validateForm = () => {
     errors.price = 'Price can have at most two decimal places.';
     valid = false;
   }
+  if (!formData.image) { // Validate if an image file has been selected
+    errors.image = 'Food Image is required.';
+    valid = false;
+  }
   if (!formData.description.trim()) {
     errors.description = 'Description is required.';
     valid = false;
@@ -236,7 +228,7 @@ const validateForm = () => {
     errors.ingredients = 'Ingredients are required.';
     valid = false;
   }
-  if (formData.time_needed === null || isNaN(formData.time_needed) || formData.time_needed <= 0) { 
+  if (formData.time_needed === null || isNaN(formData.time_needed) || formData.time_needed <= 0) {
     errors.time_needed = 'Preparation Time must be a positive number (in minutes).';
     valid = false;
   }
@@ -255,7 +247,7 @@ const createFood = async () => {
   }
 
   // Ensure we have a token before proceeding
-  if (!userToken.value) { // Updated check: simply check if token exists
+  if (!userToken.value) {
     responseMessage.value = 'Authentication token is missing. Please log in as admin to create food items.';
     createSuccess.value = false;
     return;
@@ -264,23 +256,23 @@ const createFood = async () => {
   loading.value = true;
 
   try {
-    const requestBody = {
-      food_name: formData.food_name,
-      food_tag: formData.food_tag,
-      price: parseFloat(formData.price),
-      image: "",
-      info: formData.info,
-      ingredients: formData.ingredients,
-      time_needed: parseInt(formData.time_needed, 10), 
-    };
+    // Create a FormData object to send both text fields and the file
+    const dataToSend = new FormData();
+    dataToSend.append('food_name', formData.food_name);
+    dataToSend.append('food_tag', formData.food_tag);
+    dataToSend.append('price', parseFloat(formData.price));
+    dataToSend.append('image', formData.image); // Append the actual File object
+    dataToSend.append('info', formData.info);
+    dataToSend.append('description', formData.description); // Ensure description is included
+    dataToSend.append('ingredients', formData.ingredients);
+    dataToSend.append('time_needed', parseInt(formData.time_needed, 10));
 
     const response = await fetch('http://localhost:8080/foods', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userToken.value}`, // Using the token from localStorage
+        'Authorization': `Bearer ${userToken.value}`,
       },
-      body: JSON.stringify(requestBody),
+      body: dataToSend, // Send the FormData object
     });
 
     const data = await response.json();
@@ -292,24 +284,25 @@ const createFood = async () => {
       Object.assign(formData, {
         food_name: '',
         food_tag: '',
-        price: null,
-        image: '',
+        price: null, // Reset to null
+        image: null, // Reset image to null
         info: '',
+        description: '', // Reset description
         ingredients: '',
-        time_needed: '',
+        time_needed: null, // Reset to null
       });
       const fileInput = document.getElementById('image');
-      if (fileInput) fileInput.value = '';
+      if (fileInput) fileInput.value = ''; // Clear the file input visually
+      selectedImageName.value = ''; // Clear the displayed file name
 
     } else {
       createSuccess.value = false;
       responseMessage.value = data.message || 'Failed to create food item. Please try again.';
       if (response.status === 401 || response.status === 403) {
         responseMessage.value = response.status === 401 ? "Unauthorized: Please log in with admin privileges." : "Forbidden: You don't have permission to perform this action.";
-        // IMPORTANT: If you encounter 401/403, it means the token is invalid or lacks admin role.
-        // You might want to automatically clear the token and redirect to login here.
+        // Optionally, clear token and redirect to login if unauthorized/forbidden
         // localStorage.removeItem('userToken');
-        // router.push('/login'); // You'd need to import useRouter here for this
+        // router.push('/login');
       }
     }
   } catch (error) {

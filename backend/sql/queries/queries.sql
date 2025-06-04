@@ -21,9 +21,8 @@ WHERE
     username = ?;
 
 -- name: CreateFood :exec
-INSERT INTO food (food_name, food_tag, price, info, ingredients, time_needed, picture, description, food_type, long_range)
+INSERT INTO food (food_name, price, info, ingredients, time_needed, picture, description, food_type, long_range)
 VALUES (
-    ?,
     ?,
     ?,
     ?,
@@ -50,7 +49,6 @@ SELECT * FROM food WHERE long_range = true;
 -- name: AlterFood :exec
 UPDATE food
 SET
-    food_tag = ?,
     price = ?,
     info = ?,
     ingredients = ?,
@@ -65,8 +63,9 @@ DELETE FROM food
 WHERE food_name = ?;
 
 -- name: CreateOrder :exec
-INSERT INTO orders (user_id, order_info, is_ranged)
+INSERT INTO orders (user_id, order_info, is_ranged, delivery_address)
 VALUES (
+    ?,
     ?,
     ?,
     ?
@@ -109,7 +108,7 @@ WHERE
     order_id = ?;
 
 -- name: GetAllOrders :many
-SELECT * FROM orders WHERE deleted = false;
+SELECT * FROM orders WHERE deleted = false ORDER BY order_time DESC;
 
 -- name: GetAllOrdersByUser :many
 SELECT * FROM orders WHERE user_id = ? AND deleted = false;
@@ -138,7 +137,10 @@ WHERE
 SELECT * FROM accounts WHERE is_admin = false;
 
 -- name: GetFoodByTag :many
-SELECT * FROM food WHERE food_tag = ?;
+SELECT DISTINCT food.*
+FROM food
+JOIN tags ON food.food_name = tags.food_name
+WHERE tags.tag = ?;
 
 -- name: GetFoodByType :many
 SELECT * FROM food WHERE food_type = ?;
@@ -189,7 +191,7 @@ WHERE
     food_id = ? AND order_id = ?;
 
 -- name: GetAllFoodTags :many
-SELECT DISTINCT food_tag FROM food;
+SELECT DISTINCT tag FROM tags;
 
 -- name: GetLongestTimeNeededFoodInOrder :one
 SELECT MAX(food.time_needed) AS longest_time_needed
@@ -220,3 +222,51 @@ SET
     is_done = true
 WHERE
     order_id = ?;
+
+-- name: UpdateUserTagByID :exec
+UPDATE accounts
+SET
+    user_tag = ?
+WHERE
+    id = ?;
+
+-- name: NewTag :exec
+INSERT INTO tags (tag, food_name)
+VALUES (
+    ?,
+    ?
+);
+
+-- name: DeleteTag :exec
+DELETE FROM tags
+WHERE food_name = ?;
+
+-- name: TopThreeTagByUser :many
+SELECT tag, COUNT(*) AS count
+FROM tags
+WHERE food_name IN (
+    SELECT food_name
+    FROM items
+    JOIN orders ON items.order_id = orders.order_id
+    WHERE orders.user_id = ?
+)
+GROUP BY tag
+ORDER BY count DESC
+LIMIT 3;
+
+-- name: GetOrderTotalPrice :one
+SELECT SUM(food.price * items.quantity) AS total_price
+FROM orders
+JOIN items ON orders.order_id = items.order_id
+JOIN food ON items.food_id = food.food_id
+WHERE orders.order_id = ?;
+
+-- name: GetMostOrderedTag :one
+SELECT tag, COUNT(*) AS count
+FROM tags
+JOIN items ON tags.food_name = items.food_id
+JOIN orders ON items.order_id = orders.order_id
+WHERE orders.deleted = false
+GROUP BY tag
+ORDER BY count DESC
+LIMIT 1;

@@ -12,6 +12,40 @@ import(
     "github.com/Bryanthai/ordersystem/internal/auth"
 )
 
+func updateUserTag(userID int32) error {
+    db, err := sql.Open("mysql", dbURL)
+    if err != nil {
+        return fmt.Errorf("database error: %w", err)
+    }
+    defer db.Close()
+    queries := database.New(db)
+
+    tags, err := queries.TopThreeTagByUser(context.Background(), userID)
+    if err != nil {
+        return fmt.Errorf("failed to get top tags: %w", err)
+    }
+
+    var NewUserTag string
+    for _, tag := range tags {
+        NewUserTag += tag.Tag + " "
+    }
+
+    fmt.Println("changing user tag to:", NewUserTag)
+
+    err = queries.UpdateUserTagByID(context.Background(), database.UpdateUserTagByIDParams{
+        UserTag: sql.NullString{
+            String: NewUserTag,
+            Valid:  NewUserTag != "",
+        },
+        ID:      userID,
+    })
+    if err != nil {
+        return fmt.Errorf("failed to update user tag: %w", err)
+    }
+    log.Println("User tag updated successfully for user ID:", userID)
+    return nil
+}
+
 // CREATE NEW ORDER
 func createOrderHandler(writer http.ResponseWriter, req *http.Request) {
     enableCORS(writer)
@@ -41,6 +75,7 @@ func createOrderHandler(writer http.ResponseWriter, req *http.Request) {
             FoodID   int32 `json:"food_id"`
             Quantity int32 `json:"quantity"`
         } `json:"order_items"`
+        DeliveryAddress string `json:"delivery_address"`
     }
     type CreateOrderResponse struct {
         Success bool   `json:"success"`
@@ -73,6 +108,10 @@ func createOrderHandler(writer http.ResponseWriter, req *http.Request) {
         UserID:    userID,
         OrderInfo: orderReq.OrderInfo,
         IsRanged:  orderReq.IsRanged,
+        DeliveryAddress: sql.NullString{
+            String: orderReq.DeliveryAddress,
+            Valid:  orderReq.DeliveryAddress != "",
+        },
     })
     if err != nil {
         http.Error(writer, "Failed to create order", http.StatusInternalServerError)
@@ -111,6 +150,12 @@ func createOrderHandler(writer http.ResponseWriter, req *http.Request) {
     })
     if err != nil {
         http.Error(writer, "Failed to update estimated time", http.StatusInternalServerError)
+        return
+    }
+
+    err = updateUserTag(userID)
+    if err != nil {
+        http.Error(writer, "Failed to update user tag", http.StatusInternalServerError)
         return
     }
 
@@ -699,4 +744,74 @@ func GetOrderByIdHandler(writer http.ResponseWriter, req *http.Request) {
     
     writer.Header().Set("Content-Type", "application/json")
     json.NewEncoder(writer).Encode(resp)
+}
+
+func GetOrderTotalPrice(writer http.ResponseWriter, req *http.Request) {
+    enableCORS(writer)
+    if req.Method == "OPTIONS" {
+        writer.WriteHeader(http.StatusOK)
+        return
+    }
+
+    token, err := auth.GetBearerToken(req.Header)
+    if err != nil {
+        http.Error(writer, "Invalid or missing token", http.StatusUnauthorized)
+        return
+    }
+
+    username, userID, err := auth.ValidateJWT(token, authKey)
+    if err != nil {
+        http.Error(writer, "Invalid token", http.StatusUnauthorized)
+        return
+    }
+
+    log.Println("Get order total price request received from user:", username)
+
+    type GetOrderTotalPriceResponse struct {
+        Success bool   `json:"success"`
+        Total   float64 `json:"total"`
+        Message string `json:"message"`
+    }
+
+    orderIDStr := req.URL.Query().Get("order_id")
+    if orderIDStr == "" {
+        http.Error(writer, "Missing order_id query parameter", http.StatusBadRequest)
+        return
+    }
+    var orderID int32
+    if _, err := fmt.Sscanf(orderIDStr, "%d", &orderID); err != nil {
+        http.Error(writer, "Invalid order_id", http.StatusBadRequest)
+        return
+    }
+
+    db, err := sql.Open("mysql", dbURL)
+    if err != nil {
+        http.Error(writer, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer db.Close()
+
+    queries := database.New(db)
+
+    account, err := queries.GetAccount(context.Background(), username)
+    if account.ID != userID || err != nil {
+        http.Error(writer, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+
+    totalPrice, err := queries.GetOrderTotalPrice(context.Background(), orderID)
+    if err != nil {
+        http.Error(writer, "Failed to get order total price", http.StatusInternalServerError)
+        return
+    }
+
+    resp := GetOrderTotalPriceResponse{
+        Success: true,
+        Total:   totalPrice.(float64),
+        Message: "Order total price retrieved successfully",
+    }
+    
+    writer.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(writer).Encode(resp)
+    return
 }

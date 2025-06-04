@@ -21,6 +21,48 @@
         </div>
 
         <div>
+          <label for="email" class="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+          <input
+            type="email"
+            id="email"
+            v-model="email"
+            class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+            :class="{ 'border-red-500': validationErrors.email }"
+            placeholder="Enter your email"
+            required
+          />
+          <p v-if="validationErrors.email" class="mt-1 text-sm text-red-600">{{ validationErrors.email }}</p>
+        </div>
+
+        <div>
+          <label for="address" class="block text-sm font-semibold text-gray-700 mb-1">Address</label>
+          <input
+            type="text"
+            id="address"
+            v-model="address"
+            class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+            :class="{ 'border-red-500': validationErrors.address }"
+            placeholder="Enter your address"
+            required
+          />
+          <p v-if="validationErrors.address" class="mt-1 text-sm text-red-600">{{ validationErrors.address }}</p>
+        </div>
+
+        <div>
+          <label for="phone" class="block text-sm font-semibold text-gray-700 mb-1">Phone</label>
+          <input
+            type="tel"
+            id="phone"
+            v-model="phone"
+            class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+            :class="{ 'border-red-500': validationErrors.phone }"
+            placeholder="Enter your phone number"
+            required
+          />
+          <p v-if="validationErrors.phone" class="mt-1 text-sm text-red-600">{{ validationErrors.phone }}</p>
+        </div>
+
+        <div>
           <label for="password" class="block text-sm font-semibold text-gray-700 mb-1">Password</label>
           <input
             type="password"
@@ -92,26 +134,54 @@ const router = useRouter(); // Initialize router
 const username = ref('');
 const password = ref('');
 const confirmPassword = ref('');
+const email = ref(''); // New field
+const address = ref(''); // New field
+const phone = ref(''); // New field
+
 const loading = ref(false);
 const responseMessage = ref('');
 const registerSuccess = ref(false);
 const validationErrors = reactive({
   username: '',
   password: '',
-  confirmPassword: ''
+  confirmPassword: '',
+  email: '', // New validation error
+  address: '', // New validation error
+  phone: '' // New validation error
 });
 
 // Function to validate form inputs
 const validateForm = () => {
   let valid = true;
-  validationErrors.username = '';
-  validationErrors.password = '';
-  validationErrors.confirmPassword = '';
+  // Clear all previous errors
+  Object.keys(validationErrors).forEach(key => validationErrors[key] = '');
 
   if (!username.value.trim()) {
     validationErrors.username = 'Username is required.';
     valid = false;
   }
+
+  if (!email.value.trim()) {
+    validationErrors.email = 'Email is required.';
+    valid = false;
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)) {
+    validationErrors.email = 'Please enter a valid email address.';
+    valid = false;
+  }
+
+  if (!address.value.trim()) {
+    validationErrors.address = 'Address is required.';
+    valid = false;
+  }
+
+  if (!phone.value.trim()) {
+    validationErrors.phone = 'Phone number is required.';
+    valid = false;
+  } else if (!/^\d+$/.test(phone.value)) {
+    validationErrors.phone = 'Phone number must contain only digits.';
+    valid = false;
+  }
+
   if (!password.value.trim()) {
     validationErrors.password = 'Password is required.';
     valid = false;
@@ -119,6 +189,7 @@ const validateForm = () => {
     validationErrors.password = 'Password must be at least 6 characters long.';
     valid = false;
   }
+
   if (password.value !== confirmPassword.value) {
     validationErrors.confirmPassword = 'Passwords do not match.';
     valid = false;
@@ -146,6 +217,9 @@ const handleRegister = async () => {
       body: JSON.stringify({
         username: username.value,
         password: password.value,
+        email: email.value,    // New field
+        address: address.value,  // New field
+        phone: parseInt(phone.value, 10), // Convert phone to integer
       }),
     });
 
@@ -158,6 +232,9 @@ const handleRegister = async () => {
       username.value = '';
       password.value = '';
       confirmPassword.value = '';
+      email.value = '';
+      address.value = '';
+      phone.value = '';
 
       // Redirect to login page after successful registration
       setTimeout(() => {

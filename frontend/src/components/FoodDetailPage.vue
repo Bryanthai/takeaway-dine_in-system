@@ -20,14 +20,14 @@
     <div v-else-if="!food" class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative text-center" role="alert">
       <strong class="font-bold">Food Item Not Found!</strong>
       <span class="block sm:inline ml-2">The requested food item could not be loaded.</span>
-    <router-link to="/menu" class="text-blue-600 hover:underline mt-4 block">Back to Menu</router-link>
+      <router-link to="/menu" class="text-blue-600 hover:underline mt-4 block">Back to Menu</router-link>
     </div>
 
     <div v-else class="max-w-4xl mx-auto bg-white rounded-lg shadow-xl p-8 flex flex-col md:flex-row">
       <div class="md:w-1/3 flex items-center justify-center p-4">
         <img
           v-if="food.Picture && food.Picture.String"
-          :src="'data:image/jpeg;base64,' + food.Picture.String"
+          :src="food.Picture.String"
           :alt="food.FoodName"
           class="rounded-lg shadow-md max-h-64 object-cover w-full"
         />
@@ -368,8 +368,8 @@ const saveChanges = async () => {
     } else {
       changeError.value = data.message || 'Failed to update food information.';
       if (response.status === 401 || response.status === 403) {
-         userStore.logout();
-         router.push('/login');
+          userStore.logout();
+          router.push('/login');
       }
     }
   } catch (err) {
@@ -417,8 +417,8 @@ const deleteFood = async () => {
     } else {
       deleteError.value = data.message || 'Failed to delete food.';
       if (response.status === 401 || response.status === 403) {
-         userStore.logout();
-         router.push('/login');
+          userStore.logout();
+          router.push('/login');
       }
     }
   } catch (err) {

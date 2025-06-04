@@ -306,6 +306,18 @@ func getFoodByUserTag(writer http.ResponseWriter, req *http.Request) {
         foods = append(foods, food...)
     }
 
+    // Check if there is duplicate foods
+    foodMap := make(map[int32]database.Food)
+    for _, food := range foods {
+        if _, exists := foodMap[food.FoodID]; !exists {
+            foodMap[food.FoodID] = food
+        }
+    }
+    foods = make([]database.Food, 0, len(foodMap))
+    for _, food := range foodMap {
+        foods = append(foods, food)
+    }
+
     resp := struct {
         Success bool              `json:"success"`
         Foods   []database.Food   `json:"foods"`
@@ -591,6 +603,9 @@ func GetAverageSpendingAll(writer http.ResponseWriter, req *http.Request) {
     }
 
     avgSpending, err := queries.GetAverageSpendingByAllUsers(context.Background())
+    if avgSpending == nil {
+        avgSpending = 0.0
+    }
     if err != nil {
         http.Error(writer, "Failed to retrieve average spending", http.StatusInternalServerError)
         return
@@ -651,20 +666,35 @@ func GetAverageSpendingByUser(writer http.ResponseWriter, req *http.Request) {
         return
     }
 
-    var avgSpendingByUser = make(map[string]float64)
+    type SpendingStruct struct {
+        Username string  `json:"username"`
+        Average  float64 `json:"average"`
+    }
+
+    var avgSpendingByUser []SpendingStruct
 
     for _, account := range accounts {
         value, err := queries.GetAverageSpendingByUser(context.Background(), account.ID)
-        avgSpendingByUser[account.Username] = value.(float64)
+        if value == nil {
+            avgSpendingByUser = append(avgSpendingByUser, SpendingStruct{
+                Username: account.Username,
+                Average:  0.0,
+            })
+            continue
+        }
         if err != nil {
             http.Error(writer, "Failed to retrieve average spending by user", http.StatusInternalServerError)
             return
         }
+        avgSpendingByUser = append(avgSpendingByUser, SpendingStruct{
+            Username: account.Username,
+            Average:  value.(float64),
+        })
     }
 
     resp := struct {
         Success bool   `json:"success"`
-        Average map[string]float64 `json:"average"`
+        Average []SpendingStruct `json:"average"`
         Message string `json:"message"`
     }{
         Success: true,

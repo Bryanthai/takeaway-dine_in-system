@@ -31,10 +31,8 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Username</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Wallet Balance</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Avg. Spending per Order</th> <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Is Admin</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Is Active</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
-            </tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Avg. Spending per Order</th>
+              </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
             <tr v-for="user in users" :key="user.UserID" :class="{'bg-red-50': user.IsDeleted, 'bg-gray-50': user.IsAdmin}">
@@ -43,40 +41,9 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ user.Email }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${{ user.WalletBalance ? user.WalletBalance.toFixed(2) : '0.00' }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${{ user.averageSpending !== undefined ? user.averageSpending.toFixed(2) : '0.00' }} </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span :class="{'bg-green-100 text-green-800': user.IsAdmin, 'bg-red-100 text-red-800': !user.IsAdmin}"
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                  {{ user.IsAdmin ? 'Yes' : 'No' }}
-                </span>
+                ${{ user.averageSpending !== undefined ? user.averageSpending.toFixed(2) : '0.00' }}
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span :class="{'bg-green-100 text-green-800': user.IsActive, 'bg-red-100 text-red-800': !user.IsActive}"
-                      class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                  {{ user.IsActive ? 'Yes' : 'No' }}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <button
-                  v-if="!user.IsDeleted"
-                  @click="toggleUserStatus(user.UserID, user.IsActive)"
-                  :class="user.IsActive ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'"
-                  class="mr-4"
-                  title="Toggle Active Status"
-                >
-                  {{ user.IsActive ? 'Deactivate' : 'Activate' }}
-                </button>
-                <button
-                  v-if="!user.IsDeleted"
-                  @click="deleteUser(user.UserID)"
-                  class="text-red-600 hover:text-red-900"
-                  title="Delete User"
-                >
-                  Delete
-                </button>
-                <span v-else class="text-gray-500">Deleted</span>
-              </td>
-            </tr>
+              </tr>
           </tbody>
         </table>
       </div>
@@ -93,8 +60,8 @@ const userStore = useUserStore();
 const router = useRouter();
 
 const users = ref([]);
-const loading = ref(true); // Single loading state for the entire page
-const error = ref(null); // Single error state for the entire page
+const loading = ref(true);
+const error = ref(null);
 
 const fetchUsersAndSpending = async () => {
   console.log("AdminUsersPage: fetchUsersAndSpending called.");
@@ -109,7 +76,6 @@ const fetchUsersAndSpending = async () => {
   }
 
   try {
-    // Fetch users and average spending concurrently
     const [usersResponse, averageSpendingResponse] = await Promise.all([
       fetch('http://localhost:8080/admin/users', {
         method: 'GET',
@@ -130,7 +96,6 @@ const fetchUsersAndSpending = async () => {
     const usersData = await usersResponse.json();
     const averageSpendingData = await averageSpendingResponse.json();
 
-    // Check users response
     if (!usersResponse.ok || !usersData.success) {
       error.value = usersData.message || `Failed to fetch users. HTTP Status: ${usersResponse.status}`;
       console.error("AdminUsersPage: Error fetching users:", error.value);
@@ -138,10 +103,9 @@ const fetchUsersAndSpending = async () => {
         userStore.logout();
         router.push('/login');
       }
-      return; // Stop if user data fetch fails
+      return;
     }
 
-    // Check average spending response
     if (!averageSpendingResponse.ok || !averageSpendingData.success) {
       error.value = averageSpendingData.message || `Failed to fetch average spending. HTTP Status: ${averageSpendingResponse.status}`;
       console.error("AdminUsersPage: Error fetching average spending:", error.value);
@@ -149,18 +113,32 @@ const fetchUsersAndSpending = async () => {
         userStore.logout();
         router.push('/login');
       }
-      return; // Stop if average spending fetch fails
+      return;
     }
 
-    // Both successful, now combine data
     const fetchedUsers = usersData.users || [];
-    const averageMap = averageSpendingData.Average || {};
+    const averageSpendingArray = averageSpendingData.average || [];
 
-    // Augment each user with their average spending
-    users.value = fetchedUsers.map(user => ({
-      ...user,
-      averageSpending: averageMap[user.Username] !== undefined ? averageMap[user.Username] : 0.00 // Default to 0 if no data
-    }));
+    // Convert the array of average spending objects into a map for easier lookup
+    const averageMap = averageSpendingArray.reduce((acc, item) => {
+      acc[item.username] = item.average;
+      return acc;
+    }, {});
+
+    users.value = fetchedUsers.map(user => {
+      const avgSp = averageMap[user.Username];
+
+      return {
+        UserID: user.ID,
+        Username: user.Username,
+        Email: user.Email,
+        WalletBalance: parseFloat(user.Balance) || 0.00,
+        IsAdmin: user.IsAdmin, // Keep this data internally if needed for other logic, but not displayed
+        IsActive: true,      // Keep this data internally if needed for other logic, but not displayed
+        IsDeleted: false,    // Keep this data internally if needed for other logic, but not displayed
+        averageSpending: parseFloat(avgSp) || 0.00
+      };
+    });
 
     console.log("AdminUsersPage: Users and average spending combined successfully.");
 
@@ -172,67 +150,8 @@ const fetchUsersAndSpending = async () => {
   }
 };
 
-const toggleUserStatus = async (userId, currentStatus) => {
-  const action = currentStatus ? 'deactivate' : 'activate';
-  if (!confirm(`Are you sure you want to ${action} user ID ${userId}?`)) {
-    return;
-  }
-
-  try {
-    const endpoint = currentStatus ? 'deactivate-user' : 'activate-user';
-    const response = await fetch(`http://localhost:8080/admin/${endpoint}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userStore.userToken}`,
-      },
-      body: JSON.stringify({ user_id: userId }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      alert(`User ${userId} ${action}d successfully!`);
-      fetchUsersAndSpending(); // Re-fetch all data to update the list
-    } else {
-      alert(`Failed to ${action} user ${userId}: ${data.message || 'Unknown error.'}`);
-      console.error(`Failed to ${action} user ${userId}:`, data);
-    }
-  } catch (err) {
-    alert(`Error ${action}ing user ${userId}: ${err.message}`);
-    console.error(`Network error ${action}ing user:`, err);
-  }
-};
-
-const deleteUser = async (userId) => {
-  if (!confirm(`Are you sure you want to DELETE user ID ${userId}? This will mark them as deleted.`)) {
-    return;
-  }
-
-  try {
-    const response = await fetch('http://localhost:8080/admin/delete-user', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${userStore.userToken}`,
-      },
-      body: JSON.stringify({ user_id: userId }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      alert(`User ${userId} marked as deleted successfully!`);
-      fetchUsersAndSpending(); // Re-fetch all data to update the list
-    } else {
-      alert(`Failed to delete user ${userId}: ${data.message || 'Unknown error.'}`);
-      console.error(`Failed to delete user ${userId}:`, data);
-    }
-  } catch (err) {
-    alert(`Error deleting user ${userId}: ${err.message}`);
-    console.error('Network error deleting user:', err);
-  }
-};
+// Removed toggleUserStatus function
+// Removed deleteUser function
 
 onMounted(() => {
   console.log("AdminUsersPage: Component mounted.");
@@ -241,12 +160,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Highlight deleted rows */
+/* Highlight deleted rows (still kept in case you want to visually indicate deleted users based on IsDeleted data in user object) */
 .bg-red-50 {
   background-color: #fef2f2;
 }
 
-/* Highlight admin rows (optional, distinguish from deleted) */
+/* Highlight admin rows (still kept in case you want to visually indicate admin users based on IsAdmin data in user object) */
 .bg-gray-50 {
   background-color: #f9fafb;
 }

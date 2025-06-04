@@ -49,6 +49,9 @@
                 {{ order.IsRanged ? 'Yes' : 'No' }}
               </span>
             </p>
+            <p v-if="order.IsRanged && order.DeliveryAddress && order.DeliveryAddress.Valid" class="text-gray-700 text-lg mb-2">
+                <span class="font-semibold">Delivery Address:</span> {{ order.DeliveryAddress.String }}
+            </p>
             <p class="text-gray-700 text-lg mb-2"><span class="font-semibold">Deleted:</span>
               <span :class="{'bg-red-100 text-red-800': order.Deleted, 'bg-gray-100 text-gray-800': !order.Deleted}" class="px-2 inline-flex text-sm leading-5 font-semibold rounded-full">
                 {{ order.Deleted ? 'Yes' : 'No' }}
@@ -210,7 +213,17 @@ const formatDateTime = (dateValue) => {
   try {
     const date = new Date(dateValue);
     // Use toLocaleString for a user-friendly format, e.g., "6/2/2025, 9:13:18 PM"
-    return date.toLocaleString();
+    // Setting timezone to Singapore for consistency as per previous instructions
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Singapore'
+    });
   } catch (e) {
     console.error("Error formatting date:", e);
     return String(dateValue); // Return original string/value if parsing fails

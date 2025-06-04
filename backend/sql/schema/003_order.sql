@@ -9,6 +9,7 @@ create table orders(
     estimated_time timestamp not null default current_timestamp,
     is_done bool default false not null,
     is_ranged bool default false not null,
+    delivery_address varchar(255) default null,
     deleted bool default false not null,
     is_paid bool default false not null
     );

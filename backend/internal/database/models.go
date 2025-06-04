@@ -24,7 +24,6 @@ type Account struct {
 type Food struct {
 	FoodID      int32
 	FoodName    string
-	FoodTag     string
 	Price       float64
 	FoodType    string
 	Picture     sql.NullString
@@ -44,14 +43,20 @@ type Item struct {
 }
 
 type Order struct {
-	OrderID       int32
-	UserID        int32
-	OrderInfo     string
-	Feedback      sql.NullString
-	OrderTime     sql.NullTime
-	EstimatedTime time.Time
-	IsDone        bool
-	IsRanged      bool
-	Deleted       bool
-	IsPaid        bool
+	OrderID         int32
+	UserID          int32
+	OrderInfo       string
+	Feedback        sql.NullString
+	OrderTime       sql.NullTime
+	EstimatedTime   time.Time
+	IsDone          bool
+	IsRanged        bool
+	DeliveryAddress sql.NullString
+	Deleted         bool
+	IsPaid          bool
+}
+
+type Tag struct {
+	Tag      string
+	FoodName string
 }
