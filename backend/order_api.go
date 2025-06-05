@@ -815,3 +815,62 @@ func GetOrderTotalPrice(writer http.ResponseWriter, req *http.Request) {
     json.NewEncoder(writer).Encode(resp)
     return
 }
+
+func GetAllOrderedItemsHandler(writer http.ResponseWriter, req *http.Request) {
+    enableCORS(writer)
+    if req.Method == "OPTIONS" {
+        writer.WriteHeader(http.StatusOK)
+        return
+    }
+
+    token, err := auth.GetBearerToken(req.Header)
+    if err != nil {
+        http.Error(writer, "Invalid or missing token", http.StatusUnauthorized)
+        return
+    }
+
+    username, userID, err := auth.ValidateJWT(token, authKey)
+    if err != nil {
+        http.Error(writer, "Invalid token", http.StatusUnauthorized)
+        return
+    }
+
+    log.Println("Get all ordered items request received from user:", username)
+
+    type GetAllOrderedItemsResponse struct {
+        Success bool              `json:"success"`
+        Items   []database.Item   `json:"items"`
+        Message string            `json:"message"`
+    }
+
+    db, err := sql.Open("mysql", dbURL)
+    if err != nil {
+        http.Error(writer, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer db.Close()
+
+    queries := database.New(db)
+
+    account, err := queries.GetAccount(context.Background(), username)
+    if account.ID != userID || err != nil {
+        http.Error(writer, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+
+    items, err := queries.GetAllOrderedItems(context.Background())
+    if err != nil {
+        http.Error(writer, "Failed to get ordered items", http.StatusInternalServerError)
+        return
+    }
+
+    resp := GetAllOrderedItemsResponse{
+        Success: true,
+        Items:   items,
+        Message: "Ordered items retrieved successfully",
+    }
+    
+    writer.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(writer).Encode(resp)
+    return
+}

@@ -54,6 +54,7 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
     ingredients := req.FormValue("ingredients")
     timeNeededStr := req.FormValue("time_needed")
     description := req.FormValue("description")
+    longRange := req.FormValue("long_range")
 
     var price float64
     var timeNeeded int32
@@ -103,6 +104,8 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
     infoStruct.String = info
     infoStruct.Valid = info != ""
 
+    log.Println(longRange)
+
     err = queries.CreateFood(context.Background(), database.CreateFoodParams{
         FoodName:    foodName,
         Price:       price,
@@ -111,6 +114,7 @@ func createFoodHandler(writer http.ResponseWriter, req *http.Request) {
         Ingredients: ingredients,
         TimeNeeded:  timeNeeded,
         Description: description,
+        LongRange:   longRange == "true",
     })
 
     tagSlice := removeWhiteSpace(foodTag)
@@ -170,6 +174,7 @@ func alterFoodHandler(writer http.ResponseWriter, req *http.Request) {
         Info        string  `json:"info"`
         Ingredients string  `json:"ingredients"`
         TimeNeeded  int32 `json:"time_needed"`
+        LongRange   bool    `json:"long_range"`
     }
     type AlterFoodResponse struct {
         Success bool   `json:"success"`
@@ -207,6 +212,7 @@ func alterFoodHandler(writer http.ResponseWriter, req *http.Request) {
         Ingredients: foodReq.Ingredients,
         TimeNeeded:  foodReq.TimeNeeded,
         FoodName:    foodReq.FoodName,
+        LongRange:   foodReq.LongRange,
     })
     if err != nil {
         http.Error(writer, "Failed to update food item", http.StatusInternalServerError)
@@ -342,4 +348,39 @@ func getFoodByIdHandler(writer http.ResponseWriter, req *http.Request) {
 
     writer.Header().Set("Content-Type", "application/json")
     json.NewEncoder(writer).Encode(food)
+}
+
+func GetFoodTagByFoodNameHandler(writer http.ResponseWriter, req *http.Request) {
+    enableCORS(writer)
+    if req.Method == "OPTIONS" {
+        writer.WriteHeader(http.StatusOK)
+        return
+    }
+
+    foodName := req.URL.Query().Get("food_name")
+    if foodName == "" {
+        http.Error(writer, "Missing food name", http.StatusBadRequest)
+        return
+    }
+
+    db, err := sql.Open("mysql", dbURL)
+    if err != nil {
+        http.Error(writer, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer db.Close()
+
+    queries := database.New(db)
+    tags, err := queries.GetFoodTagByFoodName(context.Background(), foodName)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            http.Error(writer, "No tags found for this food item", http.StatusNotFound)
+        } else {
+            http.Error(writer, "Failed to fetch food tags", http.StatusInternalServerError)
+        }
+        return
+    }
+
+    writer.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(writer).Encode(tags)
 }

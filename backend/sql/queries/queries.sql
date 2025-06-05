@@ -21,9 +21,8 @@ WHERE
     username = ?;
 
 -- name: CreateFood :exec
-INSERT INTO food (food_name, price, info, ingredients, time_needed, picture, description, food_type, long_range)
+INSERT INTO food (food_name, price, info, ingredients, time_needed, picture, description, long_range)
 VALUES (
-    ?,
     ?,
     ?,
     ?,
@@ -53,8 +52,8 @@ SET
     info = ?,
     ingredients = ?,
     time_needed = ?,
-    picture = ?,
-    description = ?
+    description = ?,
+    long_range = ?
 WHERE
     food_name = ?;
 
@@ -141,9 +140,6 @@ SELECT DISTINCT food.*
 FROM food
 JOIN tags ON food.food_name = tags.food_name
 WHERE tags.tag = ?;
-
--- name: GetFoodByType :many
-SELECT * FROM food WHERE food_type = ?;
 
 -- name: GetMostOrderedFood :many
 SELECT food.food_name, COUNT(items.food_id) AS order_count
@@ -270,3 +266,11 @@ WHERE orders.deleted = false
 GROUP BY tag
 ORDER BY count DESC
 LIMIT 1;
+
+-- name: GetFoodTagByFoodName :many
+SELECT tag
+FROM tags
+WHERE food_name = ?;
+
+-- name: GetAllOrderedItems :many
+SELECT * FROM items;

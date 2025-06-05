@@ -113,6 +113,16 @@
           <p v-if="errors.time_needed" class="mt-1 text-sm text-red-600">{{ errors.time_needed }}</p>
         </div>
 
+        <div class="flex items-center">
+          <input
+            type="checkbox"
+            id="long_range"
+            v-model="formData.long_range"
+            class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+          />
+          <label for="long_range" class="ml-2 block text-sm font-semibold text-gray-700">Available for Long Range Delivery</label>
+        </div>
+
         <button
           type="submit"
           :disabled="loading"
@@ -157,6 +167,7 @@ const formData = reactive({
   description: '', // Added description to formData
   ingredients: '',
   time_needed: null, // Changed to null, will hold the number
+  long_range: false, // **Added new field for long_range, default to false**
 });
 
 const errors = reactive({
@@ -266,6 +277,7 @@ const createFood = async () => {
     dataToSend.append('description', formData.description); // Ensure description is included
     dataToSend.append('ingredients', formData.ingredients);
     dataToSend.append('time_needed', parseInt(formData.time_needed, 10));
+    dataToSend.append('long_range', formData.long_range); // **Append the new long_range field**
 
     const response = await fetch('http://localhost:8080/foods', {
       method: 'POST',
@@ -290,6 +302,7 @@ const createFood = async () => {
         description: '', // Reset description
         ingredients: '',
         time_needed: null, // Reset to null
+        long_range: false, // **Reset long_range to false**
       });
       const fileInput = document.getElementById('image');
       if (fileInput) fileInput.value = ''; // Clear the file input visually

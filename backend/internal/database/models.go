@@ -25,7 +25,6 @@ type Food struct {
 	FoodID      int32
 	FoodName    string
 	Price       float64
-	FoodType    string
 	Picture     sql.NullString
 	LongRange   bool
 	Description string

@@ -27,15 +27,43 @@
         <table class="min-w-full bg-white border border-gray-200 rounded-lg shadow-md">
           <thead class="bg-gray-200">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">User ID</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-300 transition-colors duration-200"
+                  :class="{ 'bg-gray-300 text-gray-900': sortColumn === 'UserID' }"
+                  @click="sortBy('UserID')">
+                <div class="flex items-center">
+                  User ID
+                  <span v-if="sortColumn === 'UserID'" class="ml-1">
+                    <span v-if="sortDirection === 'asc'">&#9650;</span> <span v-else>&#9660;</span> </span>
+                </div>
+              </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Username</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Email</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Wallet Balance</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Avg. Spending per Order</th>
-              </tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-300 transition-colors duration-200"
+                  :class="{ 'bg-gray-300 text-gray-900': sortColumn === 'WalletBalance' }"
+                  @click="sortBy('WalletBalance')">
+                <div class="flex items-center">
+                  Wallet Balance
+                  <span v-if="sortColumn === 'WalletBalance'" class="ml-1">
+                    <span v-if="sortDirection === 'asc'">&#9650;</span>
+                    <span v-else>&#9660;</span>
+                  </span>
+                </div>
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-300 transition-colors duration-200"
+                  :class="{ 'bg-gray-300 text-gray-900': sortColumn === 'averageSpending' }"
+                  @click="sortBy('averageSpending')">
+                <div class="flex items-center">
+                  Avg. Spending per Order
+                  <span v-if="sortColumn === 'averageSpending'" class="ml-1">
+                    <span v-if="sortDirection === 'asc'">&#9650;</span>
+                    <span v-else>&#9660;</span>
+                  </span>
+                </div>
+              </th>
+            </tr>
           </thead>
           <tbody class="divide-y divide-gray-200">
-            <tr v-for="user in users" :key="user.UserID" :class="{'bg-red-50': user.IsDeleted, 'bg-gray-50': user.IsAdmin}">
+            <tr v-for="user in sortedUsers" :key="user.UserID" :class="{'bg-red-50': user.IsDeleted, 'bg-gray-50': user.IsAdmin}">
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ user.UserID }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ user.Username }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ user.Email }}</td>
@@ -43,7 +71,7 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 ${{ user.averageSpending !== undefined ? user.averageSpending.toFixed(2) : '0.00' }}
               </td>
-              </tr>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -52,7 +80,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useRouter } from 'vue-router';
 
@@ -62,6 +90,49 @@ const router = useRouter();
 const users = ref([]);
 const loading = ref(true);
 const error = ref(null);
+
+// Reactive properties for sorting
+const sortColumn = ref('UserID'); // Default sort column
+const sortDirection = ref('asc'); // Default sort direction
+
+// Function to handle sorting
+const sortBy = (column) => {
+  if (sortColumn.value === column) {
+    // If clicking the same column, reverse the sort direction
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    // If clicking a new column, set it as the sort column and default to ascending
+    sortColumn.value = column;
+    sortDirection.value = 'asc';
+  }
+};
+
+// Computed property for sorted users
+const sortedUsers = computed(() => {
+  if (!users.value || users.value.length === 0) {
+    return [];
+  }
+
+  // Create a shallow copy to avoid mutating the original array
+  return [...users.value].sort((a, b) => {
+    const aValue = a[sortColumn.value];
+    const bValue = b[sortColumn.value];
+
+    // Handle string comparison for non-numeric fields if needed,
+    // though for UserID, WalletBalance, and averageSpending, direct comparison is fine.
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortDirection.value === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+    } else {
+      if (aValue < bValue) {
+        return sortDirection.value === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortDirection.value === 'asc' ? 1 : -1;
+      }
+      return 0;
+    }
+  });
+});
 
 const fetchUsersAndSpending = async () => {
   console.log("AdminUsersPage: fetchUsersAndSpending called.");
@@ -133,9 +204,9 @@ const fetchUsersAndSpending = async () => {
         Username: user.Username,
         Email: user.Email,
         WalletBalance: parseFloat(user.Balance) || 0.00,
-        IsAdmin: user.IsAdmin, // Keep this data internally if needed for other logic, but not displayed
-        IsActive: true,      // Keep this data internally if needed for other logic, but not displayed
-        IsDeleted: false,    // Keep this data internally if needed for other logic, but not displayed
+        IsAdmin: user.IsAdmin,
+        IsActive: true,
+        IsDeleted: false,
         averageSpending: parseFloat(avgSp) || 0.00
       };
     });
@@ -149,9 +220,6 @@ const fetchUsersAndSpending = async () => {
     loading.value = false;
   }
 };
-
-// Removed toggleUserStatus function
-// Removed deleteUser function
 
 onMounted(() => {
   console.log("AdminUsersPage: Component mounted.");
@@ -168,5 +236,22 @@ onMounted(() => {
 /* Highlight admin rows (still kept in case you want to visually indicate admin users based on IsAdmin data in user object) */
 .bg-gray-50 {
   background-color: #f9fafb;
+}
+
+/* Cursor pointer for sortable columns */
+th.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Style for active sort column header */
+th.bg-gray-300 {
+  background-color: #d1d5db; /* A slightly darker gray */
+  color: #1f2937; /* Darker text */
+}
+
+/* Flexbox for header content to align text and icon */
+.flex.items-center {
+  display: flex;
+  align-items: center;
 }
 </style>

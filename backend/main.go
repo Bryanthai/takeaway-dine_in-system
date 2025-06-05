@@ -23,7 +23,7 @@ func initServeMux(serveMux *http.ServeMux) {
 	serveMux.HandleFunc("PUT /foods/change-info", alterFoodHandler) //done
 	serveMux.HandleFunc("DELETE /foods", deleteFoodHandler) //done
 	serveMux.HandleFunc("GET /foods", getFoodByIdHandler) //done
-
+	serveMux.HandleFunc("GET /foods/tags", GetFoodTagByFoodNameHandler) //done
 
 	serveMux.HandleFunc("POST /orders", createOrderHandler) //done
 	serveMux.HandleFunc("DELETE /orders", deleteOrderHandler) //done
@@ -34,6 +34,7 @@ func initServeMux(serveMux *http.ServeMux) {
 	serveMux.HandleFunc("GET /orders/items", getOrderedItemsHandler) //done
 	serveMux.HandleFunc("PUT /orders/finish", finishOrder) //done
 	serveMux.HandleFunc("GET /orders/price", GetOrderTotalPrice) //done
+	serveMux.HandleFunc("GET /orders/all-items", GetAllOrderedItemsHandler) //done
 
 	serveMux.HandleFunc("GET /menu", getAllFoodHandler) //done
 	serveMux.HandleFunc("GET /menu/rating-times-info", getFoodRatingandOrderedTimesByFoodID) //done

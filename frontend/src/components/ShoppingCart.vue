@@ -200,6 +200,37 @@ const checkout = async () => {
   }
   const userToken = userStore.userToken; // Get token from store
 
+  // *** NEW VALIDATION STEP FOR LONG_RANGE DELIVERY ***
+  if (isDelivery.value) {
+    const foodsNotLongRange = [];
+    for (const item of cartStore.items) {
+      // Fetch the latest food details to ensure LongRange status is up-to-date
+      try {
+        const response = await fetch(`http://localhost:8080/foods?food_id=${item.food.FoodID}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch food details for FoodID: ${item.food.FoodID}`);
+        }
+        const foodDetails = await response.json();
+        // Assuming the response for a single food item is the Food struct directly
+        if (!foodDetails.LongRange) {
+          foodsNotLongRange.push(foodDetails.FoodName);
+        }
+      } catch (error) {
+        console.error(`Error checking LongRange status for food ID ${item.food.FoodID}:`, error);
+        checkoutError.value = `Failed to verify delivery availability for some items. Please try again.`;
+        checkoutLoading.value = false;
+        return;
+      }
+    }
+
+    if (foodsNotLongRange.length > 0) {
+      checkoutError.value = `The following items are not available for long-range delivery: ${foodsNotLongRange.join(', ')}. Please remove them or uncheck 'Order for Delivery'.`;
+      checkoutLoading.value = false;
+      return; // Stop checkout process
+    }
+  }
+  // *** END NEW VALIDATION STEP ***
+
   // Prepare OrderInfo string (summary of items for the order overall)
   const orderInfoArray = cartStore.items.map(item => ({
     FoodID: item.food.FoodID,

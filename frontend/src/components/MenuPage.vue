@@ -105,8 +105,17 @@
 
             <div class="p-4">
               <h3 class="text-xl font-bold text-gray-900 mb-2 truncate">{{ food.FoodName }}</h3>
-              <p class="text-gray-600 text-sm mb-2">Tag: <span class="font-semibold">{{ food.FoodTag }}</span></p>
+              <p class="text-gray-600 text-sm mb-2">
+                Tags:
+                <span v-if="food.tags && food.tags.length > 0" class="font-semibold">{{ food.tags.join(', ') }}</span>
+                <span v-else class="font-semibold text-gray-500">N/A</span>
+              </p>
               <p class="text-gray-600 text-sm mb-2">Time: <span class="font-semibold">{{ food.TimeNeeded }} mins</span></p>
+              <p class="text-gray-600 text-sm">
+                Delivery:
+                <span v-if="food.long_range" class="font-semibold text-green-600">Available</span>
+                <span v-else class="font-semibold text-red-600">Not Available</span>
+              </p>
             </div>
           </router-link>
 
@@ -183,6 +192,40 @@ const currentFoodList = computed(() => {
   return selectedCategory ? selectedCategory.foods : [];
 });
 
+// CORRECTED FUNCTION: fetchFoodTags to handle direct array response
+const fetchFoodTags = async (food) => {
+  if (!food || !food.FoodName) return;
+
+  try {
+    const response = await fetch(`http://localhost:8080/foods/tags?food_name=${encodeURIComponent(food.FoodName)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch tags for ${food.FoodName}: HTTP error! Status: ${response.status}`);
+      food.tags = []; // Ensure it's an empty array on HTTP error
+      return;
+    }
+
+    // *** THIS IS THE CRUCIAL CHANGE: Directly parse as an array ***
+    const tagsArray = await response.json();
+
+    if (Array.isArray(tagsArray)) {
+      food.tags = tagsArray;
+    } else {
+      // Fallback if the API returns something unexpected (not an array)
+      console.warn(`Unexpected data format for tags for ${food.FoodName}: Expected an array, but got`, tagsArray);
+      food.tags = [];
+    }
+  } catch (err) {
+    console.error(`Error fetching tags for ${food.FoodName}:`, err);
+    food.tags = []; // Set to empty array on network or parsing error
+  }
+};
+
 const fetchFoodByTypes = async () => {
   initialError.value = null;
   try {
@@ -200,7 +243,15 @@ const fetchFoodByTypes = async () => {
 
     const data = await response.json();
     if (data.success) {
-        foodCategories.value = data.data || [];
+      foodCategories.value = data.data || [];
+      // Initialize tags property for reactivity
+      foodCategories.value.forEach(category => {
+        if (category.foods) {
+          category.foods.forEach(food => {
+            food.tags = []; // Initialize as empty array
+          });
+        }
+      });
     } else {
       throw new Error(data.message || 'Failed to fetch food categories.');
     }
@@ -234,6 +285,10 @@ const fetchRecommendedFood = async () => {
 
     if (response.ok && data.success) {
       recommendedFoods.value = data.foods || [];
+      // Initialize tags property for reactivity
+      recommendedFoods.value.forEach(food => {
+        food.tags = []; // Initialize as empty array
+      });
     } else {
       recommendedFoods.value = [];
       recommendationsError.value = data.message || 'Failed to retrieve recommendations.';
@@ -270,6 +325,10 @@ const fetchAllFood = async () => {
     const data = await response.json();
     if (data.success) {
       allFoods.value = data.foods || [];
+      // Initialize tags property for reactivity
+      allFoods.value.forEach(food => {
+        food.tags = []; // Initialize as empty array
+      });
     } else {
       throw new Error(data.message || 'Failed to retrieve all food items.');
     }
@@ -281,15 +340,22 @@ const fetchAllFood = async () => {
   }
 };
 
-const selectTab = (tag) => {
+const selectTab = async (tag) => {
   activeTab.value = tag;
   if (tag === 'Recommendations' && recommendedFoods.value.length === 0 && !recommendationsLoading.value) {
       if (!recommendationsError.value || recommendationsError.value === 'Authentication token is missing. Please log in to see recommendations.') {
-          fetchRecommendedFood();
+          await fetchRecommendedFood(); // Await to ensure recommendedFoods is populated before fetching tags
       }
   } else if (tag === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) {
-      fetchAllFood();
+      await fetchAllFood(); // Await to ensure allFoods is populated before fetching tags
   }
+  // Trigger fetching tags for the newly selected list
+  currentFoodList.value.forEach(food => {
+    // Only fetch if tags haven't been fetched OR if the existing tags array is empty
+    if (!food.tags || food.tags.length === 0) {
+      fetchFoodTags(food);
+    }
+  });
 };
 
 onMounted(async () => {
@@ -305,20 +371,27 @@ onMounted(async () => {
     activeTab.value = 'All Food';
   } else {
     activeTab.value = 'Recommendations';
-    fetchRecommendedFood();
+    await fetchRecommendedFood(); // Await to ensure recommendedFoods is populated
   }
   initialLoading.value = false;
+
+  // Fetch tags for the initial active tab's food items
+  currentFoodList.value.forEach(food => {
+    if (!food.tags || food.tags.length === 0) {
+      fetchFoodTags(food);
+    }
+  });
 });
 
-watch(activeTab, (newTab) => {
-    if (newTab === 'Recommendations' && recommendedFoods.value.length === 0 && !recommendationsLoading.value) {
-        if (!recommendationsError.value || recommendationsError.value === 'Authentication token is missing. Please log in to see recommendations.') {
-            fetchRecommendedFood();
-        }
-    } else if (newTab === 'All Food' && allFoods.value.length === 0 && !allFoodsLoading.value) {
-        fetchAllFood();
+watch(currentFoodList, (newList) => {
+  // When the currentFoodList changes (due to tab switch or initial load),
+  // fetch tags for all items in the new list.
+  newList.forEach(food => {
+    if (!food.tags || food.tags.length === 0) {
+      fetchFoodTags(food);
     }
-});
+  });
+}, { immediate: true }); // immediate: true runs the watcher once immediately on component mount
 </script>
 
 <style scoped>

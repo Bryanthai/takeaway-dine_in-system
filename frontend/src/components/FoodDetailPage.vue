@@ -49,13 +49,9 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           <p class="text-gray-700">
             <span class="font-semibold">Category:</span>
-            <span v-if="!isEditing">{{ food.FoodTag }}</span>
+            <span v-if="!isEditing && foodTags.length">{{ foodTags.join(', ') }}</span>
+            <span v-else-if="!isEditing && !foodTags.length">N/A</span>
             <input v-else v-model="formFood.FoodTag" type="text" class="form-input mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
-          </p>
-          <p class="text-gray-700">
-            <span class="font-semibold">Type:</span>
-            <span v-if="!isEditing">{{ food.FoodType }}</span>
-            <span v-else>{{ food.FoodType }}</span>
           </p>
           <p class="text-gray-700">
             <span class="font-semibold">Preparation Time:</span>
@@ -65,7 +61,15 @@
           <p class="text-gray-700">
             <span class="font-semibold">Availability:</span>
             <span v-if="!isEditing">{{ food.LongRange ? 'Delivery' : 'Pickup Only' }}</span>
-            <span v-else>{{ food.LongRange ? 'Delivery' : 'Pickup Only' }}</span>
+            <span v-else class="flex items-center mt-1">
+              <input
+                type="checkbox"
+                id="longRangeEdit"
+                v-model="formFood.LongRange"
+                class="form-checkbox h-4 w-4 text-indigo-600 transition duration-150 ease-in-out mr-2"
+              />
+              <label for="longRangeEdit" class="text-sm text-gray-700">Available for Delivery</label>
+            </span>
           </p>
 
           <p v-if="ratingLoading" class="text-gray-600 col-span-2">Loading rating...</p>
@@ -185,36 +189,36 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue'; // Import watch
 import { useRoute, useRouter } from 'vue-router';
 import { useCartStore } from '../stores/cart';
-import { useUserStore } from '../stores/user'; // Import user store
+import { useUserStore } from '../stores/user';
 
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
-const userStore = useUserStore(); // Initialize user store
+const userStore = useUserStore();
 
 const foodId = ref(null);
-const food = ref(null); // Will hold the Food object
-const ratingInfo = ref(null); // Will hold { Rating: float64, Times: int64 }
+const food = ref(null);
+const ratingInfo = ref(null);
+const foodTags = ref([]); // New ref to hold the fetched food tags
 
-const loading = ref(true); // Loading state for main food details
-const error = ref(null);    // Error for main food details
-const ratingLoading = ref(true); // Loading state for rating info
-const ratingError = ref(null);    // Error for rating info
+const loading = ref(true);
+const error = ref(null);
+const ratingLoading = ref(true);
+const ratingError = ref(null);
 
-const isEditing = ref(false); // NEW: State to toggle edit mode
-const formFood = ref({}); // NEW: Holds data for the edit form
+const isEditing = ref(false);
+const formFood = ref({});
 
-const changeLoading = ref(false); // NEW: Loading state for change info API
-const changeError = ref(null);    // NEW: Error state for change info API
-const changeSuccess = ref(false); // NEW: Success state for change info API
+const changeLoading = ref(false);
+const changeError = ref(null);
+const changeSuccess = ref(false);
 
-const deleteLoading = ref(false); // NEW: Loading state for delete food API
-const deleteError = ref(null);    // NEW: Error state for delete food API
-const deleteSuccess = ref(false); // NEW: Success state for delete food API
-
+const deleteLoading = ref(false);
+const deleteError = ref(null);
+const deleteSuccess = ref(false);
 
 // Function to fetch food details
 const fetchFoodDetails = async () => {
@@ -232,7 +236,7 @@ const fetchFoodDetails = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': userStore.userToken ? `Bearer ${userStore.userToken}` : '', // Include token if available
+        'Authorization': userStore.userToken ? `Bearer ${userStore.userToken}` : '',
       },
     });
 
@@ -248,16 +252,19 @@ const fetchFoodDetails = async () => {
       error.value = 'Food item not found or invalid data received.';
       food.value = null;
     } else {
-        // Initialize formFood with current food data when details are loaded
-        // Ensure to handle sql.NullString fields correctly for the form
+        // Initialize formFood with current food data (excluding FoodTag for now)
         formFood.value = {
             FoodName: food.value.FoodName,
-            FoodTag: food.value.FoodTag,
+            // FoodTag will be populated from the /foods/tags endpoint results for editing
             Price: food.value.Price,
             Info: food.value.Info.Valid ? food.value.Info.String : '',
             Ingredients: food.value.Ingredients,
             TimeNeeded: food.value.TimeNeeded,
+            LongRange: food.value.LongRange,
+            Description: food.value.Description,
         };
+        // After food details are loaded, fetch its tags
+        await fetchFoodTags(food.value.FoodName);
     }
 
   } catch (err) {
@@ -267,6 +274,45 @@ const fetchFoodDetails = async () => {
     loading.value = false;
   }
 };
+
+// New function to fetch food tags
+const fetchFoodTags = async (foodName) => {
+  foodTags.value = []; // Clear previous tags
+  if (!foodName) return;
+
+  try {
+    const response = await fetch(`http://localhost:8080/foods/tags?food_name=${encodeURIComponent(foodName)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': userStore.userToken ? `Bearer ${userStore.userToken}` : '',
+      },
+    });
+
+    if (!response.ok) {
+        // Handle non-200 responses, e.g., if food_name is not found or no tags exist
+        if (response.status === 404) {
+            console.warn(`No tags found for food: ${foodName}`);
+        } else {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
+        }
+    } else {
+        const data = await response.json();
+        // Assuming the backend returns an array of strings directly, e.g., ["tag1", "tag2"]
+        if (Array.isArray(data)) {
+            foodTags.value = data;
+        } else {
+            console.warn('Unexpected data format for food tags:', data);
+            foodTags.value = [];
+        }
+    }
+  } catch (err) {
+    console.error(`Error fetching food tags for ${foodName}:`, err);
+    foodTags.value = [];
+  }
+};
+
 
 // Function to fetch food rating and times ordered
 const fetchFoodRating = async () => {
@@ -284,7 +330,6 @@ const fetchFoodRating = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // 'Authorization': `Bearer ${userToken.value}`, // Usually not needed for public rating info
       },
     });
 
@@ -312,11 +357,14 @@ const startEditing = () => {
   // Deep copy food data to formFood to allow cancellation without affecting original
   formFood.value = {
     FoodName: food.value.FoodName,
-    FoodTag: food.value.FoodTag,
+    // When starting edit, pre-fill the FoodTag input with the current tags (joined by comma for editing)
+    FoodTag: foodTags.value.join(', '),
     Price: food.value.Price,
-    Info: food.value.Info.Valid ? food.value.Info.String : '', // Handle sql.NullString
+    Info: food.value.Info.Valid ? food.value.Info.String : '',
     Ingredients: food.value.Ingredients,
     TimeNeeded: food.value.TimeNeeded,
+    LongRange: food.value.LongRange,
+    Description: food.value.Description,
   };
   clearAdminMessages();
 };
@@ -325,13 +373,12 @@ const startEditing = () => {
 const cancelEditing = () => {
   isEditing.value = false;
   clearAdminMessages();
-  // No need to re-fetch if we just want to revert to original display data
 };
 
 // Admin Action: Save Changes (PUT /foods/change-info)
 const saveChanges = async () => {
   changeLoading.value = true;
-  clearAdminMessages(); // Clear previous messages
+  clearAdminMessages();
 
   if (!userStore.isAdmin) {
     changeError.value = "Unauthorized: Not an admin.";
@@ -347,12 +394,17 @@ const saveChanges = async () => {
         'Authorization': `Bearer ${userStore.userToken}`,
       },
       body: JSON.stringify({
+        food_id: foodId.value,
         food_name: formFood.value.FoodName,
-        food_tag: formFood.value.FoodTag,
+        // Send the updated FoodTag from the form.
+        // If the backend expects an array, you might need to split formFood.FoodTag by comma:
+        food_tag: formFood.value.FoodTag, // Assuming backend can handle comma-separated string or expects single tag
         price: formFood.value.Price,
         info: formFood.value.Info,
         ingredients: formFood.value.Ingredients,
         time_needed: formFood.value.TimeNeeded,
+        long_range: formFood.value.LongRange,
+        description: formFood.value.Description,
       }),
     });
 
@@ -360,10 +412,10 @@ const saveChanges = async () => {
 
     if (response.ok && data.success) {
       changeSuccess.value = true;
-      isEditing.value = false; // Exit edit mode on success
-      await fetchFoodDetails(); // Re-fetch to update displayed data
+      isEditing.value = false;
+      await fetchFoodDetails(); // Re-fetch all data, including tags, to update displayed data
       setTimeout(() => {
-        changeSuccess.value = false; // Clear success message after a delay
+        changeSuccess.value = false;
       }, 3000);
     } else {
       changeError.value = data.message || 'Failed to update food information.';
@@ -387,7 +439,7 @@ const deleteFood = async () => {
   }
 
   deleteLoading.value = true;
-  clearAdminMessages(); // Clear previous messages
+  clearAdminMessages();
 
   if (!userStore.isAdmin) {
     deleteError.value = "Unauthorized: Not an admin.";
@@ -403,7 +455,7 @@ const deleteFood = async () => {
         'Authorization': `Bearer ${userStore.userToken}`,
       },
       body: JSON.stringify({
-        food_name: food.value.FoodName, // Use the actual food name for deletion
+        food_name: food.value.FoodName,
       }),
     });
 
@@ -412,8 +464,7 @@ const deleteFood = async () => {
     if (response.ok && data.success) {
       deleteSuccess.value = true;
       alert(`Food "${food.value.FoodName}" deleted successfully!`);
-      // Redirect to the admin menu or a general menu page after deletion
-      router.push('/admin/create-food'); // Or another appropriate admin page
+      router.push('/admin/create-food');
     } else {
       deleteError.value = data.message || 'Failed to delete food.';
       if (response.status === 401 || response.status === 403) {
@@ -445,11 +496,20 @@ const addToCart = (foodItem) => {
   }, 2000);
 };
 
+// Watch for changes in food.value.FoodName to re-fetch tags if the food name itself changes
+// (though in this context, the food name typically won't change while on the same details page)
+watch(() => food.value?.FoodName, (newFoodName) => {
+  if (newFoodName) {
+    fetchFoodTags(newFoodName);
+  }
+}, { immediate: false }); // immediate: false as food details are fetched on mount already.
+
 // On component mount
 onMounted(async () => {
-  foodId.value = route.params.id; // Get the ID from the URL parameter
+  foodId.value = route.params.id;
 
   if (foodId.value) {
+    // Fetch food details and rating concurrently
     await Promise.all([
       fetchFoodDetails(),
       fetchFoodRating()

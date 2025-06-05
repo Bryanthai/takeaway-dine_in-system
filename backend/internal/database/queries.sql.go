@@ -44,8 +44,8 @@ SET
     info = ?,
     ingredients = ?,
     time_needed = ?,
-    picture = ?,
-    description = ?
+    description = ?,
+    long_range = ?
 WHERE
     food_name = ?
 `
@@ -55,8 +55,8 @@ type AlterFoodParams struct {
 	Info        sql.NullString
 	Ingredients string
 	TimeNeeded  int32
-	Picture     sql.NullString
 	Description string
+	LongRange   bool
 	FoodName    string
 }
 
@@ -66,8 +66,8 @@ func (q *Queries) AlterFood(ctx context.Context, arg AlterFoodParams) error {
 		arg.Info,
 		arg.Ingredients,
 		arg.TimeNeeded,
-		arg.Picture,
 		arg.Description,
+		arg.LongRange,
 		arg.FoodName,
 	)
 	return err
@@ -104,9 +104,8 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) er
 }
 
 const createFood = `-- name: CreateFood :exec
-INSERT INTO food (food_name, price, info, ingredients, time_needed, picture, description, food_type, long_range)
+INSERT INTO food (food_name, price, info, ingredients, time_needed, picture, description, long_range)
 VALUES (
-    ?,
     ?,
     ?,
     ?,
@@ -126,7 +125,6 @@ type CreateFoodParams struct {
 	TimeNeeded  int32
 	Picture     sql.NullString
 	Description string
-	FoodType    string
 	LongRange   bool
 }
 
@@ -139,7 +137,6 @@ func (q *Queries) CreateFood(ctx context.Context, arg CreateFoodParams) error {
 		arg.TimeNeeded,
 		arg.Picture,
 		arg.Description,
-		arg.FoodType,
 		arg.LongRange,
 	)
 	return err
@@ -344,7 +341,7 @@ func (q *Queries) GetAllDeletedOrdersByUser(ctx context.Context, userID int32) (
 }
 
 const getAllFood = `-- name: GetAllFood :many
-SELECT food_id, food_name, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food
+SELECT food_id, food_name, price, picture, long_range, description, info, ingredients, time_needed FROM food
 `
 
 func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
@@ -360,7 +357,6 @@ func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
 			&i.FoodID,
 			&i.FoodName,
 			&i.Price,
-			&i.FoodType,
 			&i.Picture,
 			&i.LongRange,
 			&i.Description,
@@ -382,7 +378,7 @@ func (q *Queries) GetAllFood(ctx context.Context) ([]Food, error) {
 }
 
 const getAllFoodLongRange = `-- name: GetAllFoodLongRange :many
-SELECT food_id, food_name, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE long_range = true
+SELECT food_id, food_name, price, picture, long_range, description, info, ingredients, time_needed FROM food WHERE long_range = true
 `
 
 func (q *Queries) GetAllFoodLongRange(ctx context.Context) ([]Food, error) {
@@ -398,7 +394,6 @@ func (q *Queries) GetAllFoodLongRange(ctx context.Context) ([]Food, error) {
 			&i.FoodID,
 			&i.FoodName,
 			&i.Price,
-			&i.FoodType,
 			&i.Picture,
 			&i.LongRange,
 			&i.Description,
@@ -436,6 +431,39 @@ func (q *Queries) GetAllFoodTags(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, tag)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllOrderedItems = `-- name: GetAllOrderedItems :many
+SELECT item_id, order_id, food_id, quantity, rating FROM items
+`
+
+func (q *Queries) GetAllOrderedItems(ctx context.Context) ([]Item, error) {
+	rows, err := q.db.QueryContext(ctx, getAllOrderedItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Item
+	for rows.Next() {
+		var i Item
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.OrderID,
+			&i.FoodID,
+			&i.Quantity,
+			&i.Rating,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -614,7 +642,7 @@ func (q *Queries) GetAverageSpendingByUser(ctx context.Context, userID int32) (i
 }
 
 const getFood = `-- name: GetFood :one
-SELECT food_id, food_name, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_name = ?
+SELECT food_id, food_name, price, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_name = ?
 `
 
 func (q *Queries) GetFood(ctx context.Context, foodName string) (Food, error) {
@@ -624,7 +652,6 @@ func (q *Queries) GetFood(ctx context.Context, foodName string) (Food, error) {
 		&i.FoodID,
 		&i.FoodName,
 		&i.Price,
-		&i.FoodType,
 		&i.Picture,
 		&i.LongRange,
 		&i.Description,
@@ -636,7 +663,7 @@ func (q *Queries) GetFood(ctx context.Context, foodName string) (Food, error) {
 }
 
 const getFoodById = `-- name: GetFoodById :one
-SELECT food_id, food_name, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_id = ?
+SELECT food_id, food_name, price, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_id = ?
 `
 
 func (q *Queries) GetFoodById(ctx context.Context, foodID int32) (Food, error) {
@@ -646,7 +673,6 @@ func (q *Queries) GetFoodById(ctx context.Context, foodID int32) (Food, error) {
 		&i.FoodID,
 		&i.FoodName,
 		&i.Price,
-		&i.FoodType,
 		&i.Picture,
 		&i.LongRange,
 		&i.Description,
@@ -658,7 +684,7 @@ func (q *Queries) GetFoodById(ctx context.Context, foodID int32) (Food, error) {
 }
 
 const getFoodByTag = `-- name: GetFoodByTag :many
-SELECT DISTINCT food.food_id, food.food_name, food.price, food.food_type, food.picture, food.long_range, food.description, food.info, food.ingredients, food.time_needed
+SELECT DISTINCT food.food_id, food.food_name, food.price, food.picture, food.long_range, food.description, food.info, food.ingredients, food.time_needed
 FROM food
 JOIN tags ON food.food_name = tags.food_name
 WHERE tags.tag = ?
@@ -677,7 +703,6 @@ func (q *Queries) GetFoodByTag(ctx context.Context, tag string) ([]Food, error) 
 			&i.FoodID,
 			&i.FoodName,
 			&i.Price,
-			&i.FoodType,
 			&i.Picture,
 			&i.LongRange,
 			&i.Description,
@@ -698,34 +723,25 @@ func (q *Queries) GetFoodByTag(ctx context.Context, tag string) ([]Food, error) 
 	return items, nil
 }
 
-const getFoodByType = `-- name: GetFoodByType :many
-SELECT food_id, food_name, price, food_type, picture, long_range, description, info, ingredients, time_needed FROM food WHERE food_type = ?
+const getFoodTagByFoodName = `-- name: GetFoodTagByFoodName :many
+SELECT tag
+FROM tags
+WHERE food_name = ?
 `
 
-func (q *Queries) GetFoodByType(ctx context.Context, foodType string) ([]Food, error) {
-	rows, err := q.db.QueryContext(ctx, getFoodByType, foodType)
+func (q *Queries) GetFoodTagByFoodName(ctx context.Context, foodName string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getFoodTagByFoodName, foodName)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Food
+	var items []string
 	for rows.Next() {
-		var i Food
-		if err := rows.Scan(
-			&i.FoodID,
-			&i.FoodName,
-			&i.Price,
-			&i.FoodType,
-			&i.Picture,
-			&i.LongRange,
-			&i.Description,
-			&i.Info,
-			&i.Ingredients,
-			&i.TimeNeeded,
-		); err != nil {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, tag)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
