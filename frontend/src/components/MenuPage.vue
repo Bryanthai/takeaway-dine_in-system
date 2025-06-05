@@ -113,7 +113,7 @@
               <p class="text-gray-600 text-sm mb-2">Time: <span class="font-semibold">{{ food.TimeNeeded }} mins</span></p>
               <p class="text-gray-600 text-sm">
                 Delivery:
-                <span v-if="food.long_range" class="font-semibold text-green-600">Available</span>
+                <span v-if="food.LongRange" class="font-semibold text-green-600">Available</span>
                 <span v-else class="font-semibold text-red-600">Not Available</span>
               </p>
             </div>

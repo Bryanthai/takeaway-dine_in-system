@@ -1,7 +1,7 @@
 -- +goose Up
 create table tags(
-    tag varchar(50) not null,
-    food_name varchar(30) not null,
+    tag varchar(100) not null,
+    food_name varchar(255) not null,
     foreign key (food_name) references food(food_name) on delete cascade
 );
 
